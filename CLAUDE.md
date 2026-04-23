@@ -4,7 +4,7 @@
 - **Name**: Serif
 - **Role**: Economics student (graduating May 15, MSU Denver) + Server, Bartender & Shift Leader
 - **Expertise**: Economic analysis, critical thinking, public policy, behavioral economics, hospitality operations, real-time decision making, writing, leadership
-- **Location**: Denver, CO
+- **Location**: Winter Park, CO
 - **Background**: Originally from Turkey. English is my second language — prefer clear, simple communication over fancy vocabulary.
 
 ## Current Goals
