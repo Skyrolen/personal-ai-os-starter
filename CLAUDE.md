@@ -26,7 +26,50 @@
 - My tools: Claude, ChatGPT, Perplexity, Google Workspace (Docs, Drive, Calendar, Gmail), Outlook, Notion (want to use more), Hevy (fitness), Kindle/Audible, Robinhood, Chase, Adobe Premiere, Instagram, YouTube, AllTrails, Apple ecosystem.
 
 ## Connected Tools
-- Notion is my main workspace. When I capture tasks, ideas, or notes, save them to the appropriate Notion database (Tasks, Daily Log, Knowledge). Read from Notion when I ask about my schedule, projects, or what's on my plate.
+
+### Notion Workspace — Serif's OS
+
+Notion is my main workspace. Always route captures to the right database using these IDs:
+
+- **Tasks**: c609605c-2bfc-4cf8-9762-39a8c97e4f0a
+  Use for: anything I need to do. Required fields: Name, Due date, Priority, Project (relate to Projects DB)
+
+- **Projects**: 094cac8b-1c64-44b7-a3cb-affe2e4fe5a3
+  Use for: ongoing initiatives. Already filled with Graduation, Pet Wellness Business, Personal AI OS
+
+- **Goals**: eef14fe6-d088-44a4-b1fa-f34753a465da
+  Use for: monthly/weekly/daily goals tracking
+
+- **Daily Log**: c7017459-3ee6-4037-8aaa-f7424cf77ffe
+  Use for: quick captures, notes, ideas, wins, questions throughout the day
+
+- **People**: a5fc22e0-ea3a-4619-a8b0-9f10ee17ebcc
+  Use for: anyone I meet, contacts, follow-ups
+
+- **Calendar**: bc45d69f-7093-400a-a654-f6a9f23ec5d3
+  Use for: events, deadlines, important dates
+
+- **Notes** (Knowledge): d55827fb-4118-44e2-bdd2-2175015065c9
+  Use for: longer-form notes, references, learning
+
+- **Ideas** (Knowledge): 3bce9219-2306-47a5-b48c-8a00ffa1c148
+  Use for: brainstorms, business ideas, creative thoughts
+
+- **Reading List** (Knowledge): 6e262baf-bb06-40ac-936f-6d5e8c8e3961
+  Use for: books, articles, podcasts to consume
+
+## Routing Rules
+
+When I capture something, classify and route:
+- "I need to..." or "remind me to..." → Tasks
+- "I had an idea..." or "what if..." → Ideas
+- "I just met..." → People
+- "Save this article/book..." → Reading List
+- "Remember that..." or general thought → Daily Log
+- Goals or weekly focus → Goals
+- Events with dates → Calendar
+
+Always confirm what was saved and where.
 
 ## Rules for Claude
 
