@@ -1,71 +1,70 @@
 # Weekly Review
 
-Reflect on your week, celebrate wins, spot patterns, and set next week's focus.
+Reflect on the week, spot what moved and what didn't, set next week's focus.
 
 ## Instructions
 
-1. **Gather the week's data.** Read:
-   - All files from the past 7 days (by date in filename) in `00_Inbox/`, `10_Projects/`, `20_Areas/`, `30_People/`, `40_Admin/` (if PARA folders exist), otherwise check `notes/`
-   - `40_Admin/goals.md` - to check progress
-   - Previous weekly review if it exists (for continuity)
+1. **Gather the week's data** in parallel:
+   - Read `40_Admin/goals.md` — check progress against monthly goals
+   - Search Notion Daily Log (c7017459-3ee6-4037-8aaa-f7424cf77ffe) for entries from the past 7 days
+   - Check `40_Admin/Tasks.md` for completed vs. open tasks
+   - Read previous weekly review from `40_Admin/` if one exists (for continuity)
 
-2. **Summarize the week.** Present to the user:
-   - **Notes created this week**: List with brief descriptions
-   - **Themes**: What topics/projects dominated?
-   - **Action items found**: Completed vs. still open from notes
-   - **Goal progress**: For each monthly goal, what moved forward?
+2. **Summarize the week.** Show the user:
+   - Daily Log entries found this week (titles + dates)
+   - Tasks completed vs. still open
+   - Goal progress: what moved forward, what stalled
 
-3. **Guided reflection.** Ask the user (one at a time, conversationally):
-   - "What was your biggest win this week?"
-   - "What was your main challenge?"
-   - "What would you do differently?"
-   - "What are your top 3 priorities for next week?"
+3. **Guided reflection.** Ask one at a time using AskUserQuestion:
+   a. "What was your biggest win this week?"
+   b. "What was your main challenge or blocker?"
+   c. "What would you do differently?"
+   d. "What are your top 3 priorities for next week?"
 
-4. **Save the review.** Create `40_Admin/YYYY-MM-DD-weekly-review.md` if the folder exists, otherwise `notes/YYYY-MM-DD-weekly-review.md`:
+4. **Save the review in two places:**
 
-```markdown
----
-date: YYYY-MM-DD
-category: weekly-review
-week: YYYY-[week number]
----
+   a. Local file → `40_Admin/YYYY-MM-DD-weekly-review.md`:
+   ```markdown
+   ---
+   date: YYYY-MM-DD
+   category: weekly-review
+   week: YYYY-[week number]
+   ---
 
-# Weekly Review - Week of [start date]
+   # Weekly Review - Week of [start date]
 
-## Week Summary
-- Notes created: [count]
-- Main themes: [theme1, theme2]
+   ## Wins
+   - [Win]
 
-## Wins
-- [Win 1]
-- [Win 2]
+   ## Challenges
+   - [Challenge]
 
-## Challenges
-- [Challenge 1]
+   ## Goal Progress
+   | Goal | Status | Notes |
+   |------|--------|-------|
+   | Graduate Summa Cum Laude | [On track / Behind / Done] | |
+   | Pet wellness business concept | [On track / Behind / Done] | |
+   | Personal AI OS | [On track / Behind / Done] | |
 
-## Goal Progress
-| Goal | Status | Notes |
-|------|--------|-------|
-| [Goal 1] | [On track / Behind / Done] | [Brief note] |
-| [Goal 2] | [On track / Behind / Done] | [Brief note] |
+   ## Open Loops
+   - [ ] [Unfinished items]
 
-## Open Loops
-- [ ] [Unfinished item 1]
-- [ ] [Unfinished item 2]
+   ## Next Week's Focus
+   1.
+   2.
+   3.
 
-## Next Week's Focus
-1. [Priority 1]
-2. [Priority 2]
-3. [Priority 3]
+   ## Reflections
+   [Answers to reflection questions]
+   ```
 
-## Reflections
-[User's answers to reflection questions]
-```
+   b. Notion Notes (d55827fb-4118-44e2-bdd2-2175015065c9) — create a page with the same content titled "Weekly Review - Week of [date]"
 
-5. **Update `40_Admin/goals.md`.** If the user mentioned completing goals or changing priorities, update it accordingly.
+5. **Update `40_Admin/goals.md`** if next week's priorities differ from current This Week's Focus section.
 
-6. **Confirm.** "Weekly review saved. Your top priority for next week: [#1]. Have a great weekend!"
+6. **Close with one line:** "Week closed. Biggest win: [win]. Next week: [#1 priority]."
 
 ## When to Use
-- Friday afternoon or Sunday evening
-- Whenever you need to step back and see the big picture
+- Sunday evening or Friday afternoon
+- When you need to step back and see the big picture
+Type: /weekly-review
