@@ -25,6 +25,9 @@
 - I am pretty disorganized with calendars and notes. The system should help fix that.
 - My tools: Claude, ChatGPT, Perplexity, Google Workspace (Docs, Drive, Calendar, Gmail), Outlook, Notion (want to use more), Hevy (fitness), Kindle/Audible, Robinhood, Chase, Adobe Premiere, Instagram, YouTube, AllTrails, Apple ecosystem.
 
+## Connected Tools
+- Notion is my main workspace. When I capture tasks, ideas, or notes, save them to the appropriate Notion database (Tasks, Daily Log, Knowledge). Read from Notion when I ask about my schedule, projects, or what's on my plate.
+
 ## Rules for Claude
 
 ### Always
