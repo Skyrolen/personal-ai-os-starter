@@ -1,4 +1,9 @@
-# Tasks
+# Tasks (Archived)
+
+> Tasks have moved to Notion. This file is no longer the source of truth.
+> Live tasks: Notion Tasks database (c609605c-2bfc-4cf8-9762-39a8c97e4f0a)
+
+---
 
 ## Today - 2026-04-23
 - [ ] Explore integrations (calendar, email, Slack, Notion) - Project: Claude Co-work OS
