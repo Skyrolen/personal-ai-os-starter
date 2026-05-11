@@ -26,11 +26,11 @@ The workbook also lets one item live in many locations (Walk-in, Freezer, Prep L
 |---|---|
 | `README` | This summary, embedded in the workbook |
 | `Items` | Master catalog. One row per SKU. Sets the vendor/portion conversion |
-| `Locations` | Storage locations (Walk-in, Freezer, Dry, Sauté Line, Prep) |
+| `Locations` | Storage locations + `PullPriority` (1 = pull from here first) |
 | `Inventory` | On-hand by **item × location**. Same item appears in multiple rows |
 | `Recipes` | Long-format ingredient list. One row per ingredient per recipe |
 | `Requisition` | Pick a recipe + servings → totals in both portion and vendor units |
-| `PullList` | Which locations have the items you need, for the cook to pull |
+| `PullList` | Allocates the requisition across locations following `PullPriority` |
 
 ## Quick test (60 seconds)
 
@@ -78,13 +78,24 @@ Then add `Inventory` rows for each location it lives in.
 
 ## Adding a location
 
-`Locations` sheet → paste a row → use the `LocationCode` in new `Inventory` rows. The `PullList` and `Inventory` formulas pick it up automatically.
+`Locations` sheet → paste a row → use the `LocationCode` in new `Inventory` rows. Set `PullPriority` to control the pull order (lower = pull first). The `PullList` and `Inventory` formulas pick it up automatically.
+
+## How the PullList allocation works
+
+Default pull order (lowest priority number first): **Prep → Sauté Line → Walk-in → Dry → Freezer**. Change the `PullPriority` column on the `Locations` sheet to reorder.
+
+For each item the Requisition needs, `PullList` walks locations in priority order:
+- `PortionsToPullHere` = pull what's available here, up to the remaining need
+- `AlreadyAllocatedHigherPriority` = what earlier locations already covered
+- `StillShortAfterHere` = how much you still need to find after this location
+
+The last row for an item shows whether you can fully fulfill the requisition from existing stock.
 
 ## V1 limitations (known)
 
 - Requisition handles **one recipe at a time**. Use a scratch sheet for now if you need to combine several. Multi-recipe is a planned upgrade.
 - `PortionsPerVendorUnit` is a single scalar — doesn't model trim loss (AP → EP). Fine to start; we can add a `YieldPct` column later.
-- `PullList` shows every location holding a needed item; it doesn't pick one for you.
+- `PullPriority` is per-location, not per-(item, location). Most kitchens want the same priority regardless of item; if you don't, add an item-override column later.
 - No live Excel PivotTable — the "pivot" is formula-driven (SUMIFS/XLOOKUP). Re-opens identically in Excel, LibreOffice, Numbers, Google Sheets.
 
 ## Why a Python generator?

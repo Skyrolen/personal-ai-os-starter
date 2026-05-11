@@ -53,11 +53,12 @@ ITEMS = [
 ]
 
 LOCATIONS = [
-    ("WALKIN", "Walk-in Cooler", "Cold"),
-    ("FRZ",    "Freezer",        "Cold"),
-    ("DRY",    "Dry Storage",    "Ambient"),
-    ("SAUTE",  "Sauté Line",     "Hot Line"),
-    ("PREP",   "Prep Station",   "Prep"),
+    # LocationCode, LocationName, Zone, PullPriority (1 = pull first)
+    ("PREP",   "Prep Station",   "Prep",     1),
+    ("SAUTE",  "Sauté Line",     "Hot Line", 2),
+    ("WALKIN", "Walk-in Cooler", "Cold",     3),
+    ("DRY",    "Dry Storage",    "Ambient", 4),
+    ("FRZ",    "Freezer",        "Cold",    5),
 ]
 
 # Inventory rows show one item across many locations (the "pivot").
@@ -140,12 +141,12 @@ def build_items(wb):
 
 def build_locations(wb):
     ws = wb.create_sheet("Locations")
-    headers = ["LocationCode", "LocationName", "Zone"]
+    headers = ["LocationCode", "LocationName", "Zone", "PullPriority"]
     ws.append(headers)
     style_header(ws, 1, len(headers))
     for row in LOCATIONS:
         ws.append(list(row))
-    autosize(ws, headers, {"LocationName": 22})
+    autosize(ws, headers, {"LocationName": 22, "PullPriority": 14})
     add_table(ws, "tbl_Locations", 1, 1 + len(LOCATIONS), len(headers))
 
 
@@ -291,42 +292,72 @@ def build_requisition(wb):
 def build_pull_list(wb):
     ws = wb.create_sheet("PullList")
     headers = [
-        "LocationCode", "LocationName", "ItemCode", "ItemName",
-        "PortionsAvailable", "PortionUOM", "PortionsNeededForRequisition",
+        "ItemCode", "ItemName", "LocationCode", "LocationName",
+        "PullPriority", "PortionsAvailable", "PortionUOM",
+        "PortionsNeededTotal", "AlreadyAllocatedHigherPriority",
+        "PortionsToPullHere", "StillShortAfterHere",
     ]
     ws.append(headers)
     style_header(ws, 1, len(headers))
 
-    for r, inv in enumerate(INVENTORY, start=2):
+    priority_by_loc = {code: prio for code, _name, _zone, prio in LOCATIONS}
+    sorted_inventory = sorted(
+        INVENTORY,
+        key=lambda inv: (inv[0], priority_by_loc.get(inv[1], 999)),
+    )
+
+    for r, inv in enumerate(sorted_inventory, start=2):
         item_code, loc_code, _par, on_hand = inv
-        ws.cell(row=r, column=1, value=loc_code)
+        ws.cell(row=r, column=1, value=item_code)
         ws.cell(
             row=r, column=2,
-            value=f'=XLOOKUP(A{r}, tbl_Locations[LocationCode], tbl_Locations[LocationName], "")',
+            value=f'=XLOOKUP(A{r}, tbl_Items[ItemCode], tbl_Items[ItemName], "")',
         )
-        ws.cell(row=r, column=3, value=item_code)
+        ws.cell(row=r, column=3, value=loc_code)
         ws.cell(
             row=r, column=4,
-            value=f'=XLOOKUP(C{r}, tbl_Items[ItemCode], tbl_Items[ItemName], "")',
+            value=f'=XLOOKUP(C{r}, tbl_Locations[LocationCode], tbl_Locations[LocationName], "")',
         )
-        ws.cell(row=r, column=5, value=on_hand)
         ws.cell(
-            row=r, column=6,
-            value=f'=XLOOKUP(C{r}, tbl_Items[ItemCode], tbl_Items[PortionUOM], "")',
+            row=r, column=5,
+            value=f'=XLOOKUP(C{r}, tbl_Locations[LocationCode], tbl_Locations[PullPriority], 999)',
         )
+        ws.cell(row=r, column=6, value=on_hand)
         ws.cell(
             row=r, column=7,
+            value=f'=XLOOKUP(A{r}, tbl_Items[ItemCode], tbl_Items[PortionUOM], "")',
+        )
+        ws.cell(
+            row=r, column=8,
             value=(
-                f'=IFERROR(XLOOKUP(C{r}, tbl_Requisition[ItemCode], '
+                f'=IFERROR(XLOOKUP(A{r}, tbl_Requisition[ItemCode], '
                 f'tbl_Requisition[TotalPortionsNeeded]), 0)'
             ),
         )
+        ws.cell(
+            row=r, column=9,
+            value=(
+                f'=SUMIFS(tbl_PullList[PortionsToPullHere], '
+                f'tbl_PullList[ItemCode], A{r}, '
+                f'tbl_PullList[PullPriority], "<"&E{r})'
+            ),
+        )
+        ws.cell(
+            row=r, column=10,
+            value=f'=MIN(F{r}, MAX(0, H{r}-I{r}))',
+        )
+        ws.cell(
+            row=r, column=11,
+            value=f'=MAX(0, H{r}-I{r}-J{r})',
+        )
 
     autosize(ws, headers, {
-        "LocationName": 18, "ItemName": 22, "PortionsAvailable": 18,
-        "PortionsNeededForRequisition": 28,
+        "ItemName": 22, "LocationName": 18,
+        "PortionsAvailable": 18, "PortionsNeededTotal": 20,
+        "AlreadyAllocatedHigherPriority": 30, "PortionsToPullHere": 20,
+        "StillShortAfterHere": 20,
     })
-    add_table(ws, "tbl_PullList", 1, 1 + len(INVENTORY), len(headers))
+    add_table(ws, "tbl_PullList", 1, 1 + len(sorted_inventory), len(headers))
 
 
 def build_readme_sheet(wb):
@@ -336,11 +367,11 @@ def build_readme_sheet(wb):
         ("", False),
         ("Sheets:", True),
         ("  Items        - master catalog. One row per SKU. Edit PortionsPerVendorUnit to fix unit math.", False),
-        ("  Locations    - storage locations (Walk-in, Freezer, etc.).", False),
+        ("  Locations    - storage locations + PullPriority (1 = pull from here first).", False),
         ("  Inventory    - on-hand by item AND location. One item can have many rows here.", False),
         ("  Recipes      - long-format: one row per ingredient per recipe. Paste new rows to add a recipe.", False),
         ("  Requisition  - pick a RecipeCode in B1, ServingsNeeded in B2 - totals + vendor units appear below.", False),
-        ("  PullList     - which locations have stock for the items you need.", False),
+        ("  PullList     - allocates the requisition across locations in PullPriority order.", False),
         ("", False),
         ("Quick test:", True),
         ("  1. Open the Requisition sheet.", False),
