@@ -1,30 +1,26 @@
 # My Goals
 
-## This Month
-1. Graduate with Summa Cum Laude - Success: Protect GPA above 3.89. Finish every remaining assignment, paper, and presentation strongly. No weak submissions.
-2. Build my pet wellness business concept - Success: One clear idea, defined problem, defined audience, simple plan, something real enough to test or show someone.
-3. Build and activate my Personal AI OS - Success: A system that knows me, matches my style, and helps me with school, work, writing, and planning every single day.
+## This Month (July 2026)
+1. Build pet wellness business - full focus, no job search. Success: real plan, moving from concept toward something people can actually use or buy.
+2. Build 1 month emergency fund by September - Success: savings account holds 1 month of living expenses.
+3. Use my Personal AI OS daily - Success: it's an actual daily habit, not a one-week test.
 
 ## This Week's Focus
-- School first. Presentation on Wednesday, multiple assignments across three classes. Protect the GPA, finish strong.
+- One-week daily AI OS trial starts 2026-07-06
+- Push pet wellness business from concept toward something real
 
 ## In Progress
-- Presentation due Wednesday - actively preparing
-- Final assignments across 3 classes - managing deadlines
-- Work shifts most days 3PM-10PM, off Mon/Tue - those are my deep work days
-- Car pickup from Denver - tomorrow or Saturday
-- Post-graduation direction - actively thinking, not decided yet
-- Personal AI OS - being built right now, this system is it
-- Communication and English improvement - ongoing daily
-- Business idea development - pet wellness, Shopify, early stage
+- Pet wellness business - full focus, main post-grad project
+- Personal AI OS - one-week daily test starting 2026-07-06, goal is to make it a real habit
+- Emergency fund - target 1 month expenses by 2026-09-01
+- Work shifts - keeping current job for income while building the business
 
 ## Completed
-- (Nothing yet - let's change that!)
+- Graduated Summa Cum Laude (May 15, 2026)
 
 ## Someday / Maybe
 - Build a real business that gives me freedom, income, and ownership
 - Turn the AI OS into a full daily co-pilot that actually knows me
 - Raise English and communication to a confident, natural, high level
 - Build a consistent fitness and nutrition system
-- Explore bigger career moves and life opportunities after graduation pressure lifts
 - Build something independent - not just working for other people forever
