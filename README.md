@@ -32,8 +32,19 @@ personal-ai-os-starter/
 │   │   ├── daily-plan.md      ← /daily-plan - plan your day
 │   │   ├── weekly-review.md   ← /weekly-review - end-of-week reflection
 │   │   ├── remind-me-at.md    ← /remind-me-at - schedule a reminder
-│   │   └── execute-at.md      ← /execute-at - schedule a command
+│   │   ├── execute-at.md      ← /execute-at - schedule a command
+│   │   ├── bora-check.md      ← /bora-check - verify a trade idea before acting
+│   │   ├── portfolio.md       ← /portfolio - review holdings against policy
+│   │   └── trade-log.md       ← /trade-log - journal & score decisions
 │   └── claude-code-notifier.sh ← Optional notification helper
+├── 50_Finance/
+│   └── trading-policy.md      ← Hard rules the financial agent must obey
+├── tools/                     ← Python analysis engine (market data + indicators)
+│   ├── indicators.py          ← SMA/EMA, RSI, MACD, ATR, support/resistance
+│   ├── market_data.py         ← yfinance provider (swappable)
+│   └── verify.py              ← Trade-idea verification pipeline
+├── docs/
+│   └── TRADING-SETUP.md       ← Robinhood MCP + Chrome profile setup
 └── prompts/                   ← Universal prompts (any AI tool)
     ├── scaffold.md
     ├── interview-me-goals.md
@@ -45,7 +56,10 @@ personal-ai-os-starter/
     ├── braindump.md
     ├── goals.md
     ├── daily-plan.md
-    └── weekly-review.md
+    ├── weekly-review.md
+    ├── bora-check.md
+    ├── portfolio.md
+    └── trade-log.md
 ```
 
 After running `/scaffold`, your working folder will also have:
@@ -136,6 +150,36 @@ codex
 | **Weekly Review** | End-of-week reflection | `/weekly-review` | Say "weekly review" | Paste `prompts/weekly-review.md` |
 | **Remind Me At** | One-shot reminder | `/remind-me-at +20m Call Sarah` | - | - |
 | **Execute At** | Schedule a command to run later | `/execute-at 9am /daily-plan` | - | - |
+| **Bora Check** | Verify a trade idea before acting | `/bora-check NVDA` | - | Paste `prompts/bora-check.md` |
+| **Portfolio** | Review holdings against policy | `/portfolio` | - | Paste `prompts/portfolio.md` |
+| **Trade Log** | Journal & score decisions | `/trade-log review` | - | Paste `prompts/trade-log.md` |
+
+## Financial Agent (optional)
+
+An optional module that connects Claude to a [Robinhood agentic
+account](https://robinhood.com/us/en/agentic-trading/) and acts as a
+**verification layer** over a trader you follow — checking their calls against
+independent data before any order is proposed.
+
+The premise is that copy-trading fails in predictable ways: the call is stale by
+the time you see it, price has already run past the stated entry, the position
+doesn't fit your account, or you end up holding a dozen names that are all the
+same bet. `/bora-check` tests for exactly those.
+
+- **The agent never places an order on its own.** It analyses, sizes to your
+  policy, runs Robinhood's `review_equity_order` simulation, and stops for your
+  approval of that specific ticket.
+- **Rules live in `50_Finance/trading-policy.md`** — position caps, earnings
+  blackout, liquidity floor, circuit breakers — and the agent must refuse to
+  break them, including when you ask it to in the moment.
+- **Personal data stays out of git.** Trade logs, balances, and any subscriber
+  content live in `50_Finance/private/`, which is gitignored.
+
+Setup, limits, and what it deliberately does *not* do:
+**[docs/TRADING-SETUP.md](docs/TRADING-SETUP.md)**
+
+> Analysis, not advice. A trade that passes every check can still lose the whole
+> position.
 
 ## Bonus Scheduling (Claude Code)
 

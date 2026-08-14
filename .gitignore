@@ -1,0 +1,29 @@
+# --- Private financial data -------------------------------------------------
+# This repository is public. Nothing under 50_Finance/private/ may ever be
+# committed: it holds live account balances, position sizes, a trade journal,
+# and Bora Ozkent's subscriber-only content (which is his, not ours to publish).
+50_Finance/private/
+
+# Secrets
+.env
+.env.*
+!.env.example
+*.key
+credentials.json
+
+# Anything explicitly marked local
+*.local.md
+*.local.json
+
+# --- Python -----------------------------------------------------------------
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# --- OS / editor ------------------------------------------------------------
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
