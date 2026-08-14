@@ -3,18 +3,20 @@
 Runs the mechanical checks behind /bora-check and prints a brief. The division
 of labour matters:
 
-  - This script does arithmetic and market data: drift, indicators, sizing,
-    liquidity, policy limits. Things with a right answer.
+  - This script does arithmetic: drift, indicators, sizing, liquidity, policy
+    limits. Things with a right answer.
   - Claude does judgement and MCP: reading the thesis, calling Robinhood,
     weighing conflicting evidence, deciding.
 
-This script NEVER places an order and has no broker access at all. The worst it
-can do is print a wrong number, which is why the checks are separated from the
-execution path entirely.
+This script NEVER places an order, and has no broker access and no network
+access at all. Market data arrives as a JSON file the agent assembled from
+Robinhood MCP calls. The worst this can do is print a wrong number.
 
 Usage:
-    python tools/verify.py --call call.json [--account account.json] [--json]
-    python tools/verify.py --ticker NVDA --call-price 120 --call-date 2026-07-01
+    python tools/verify.py --call call.json --market market.json \
+                           [--account account.json] [--json]
+
+See market_data.py for the market.json shape.
 
 call.json:
     {
@@ -28,11 +30,11 @@ call.json:
       "source": "Skool post 2026-07-01"
     }
 
-account.json (filled by Claude from the Robinhood MCP read tools):
+account.json (from get_portfolio + get_equity_positions on the AGENTIC account):
     {
-      "account_value": 25000.0,
-      "buying_power": 8000.0,
-      "settled_cash": 5000.0,
+      "account_value": 3000.0,
+      "buying_power": 3000.0,
+      "settled_cash": 3000.0,
       "positions": [
         {"ticker": "AAPL", "shares": 10, "market_value": 2000.0,
          "sector": "Technology"}
@@ -51,7 +53,8 @@ import sys
 from dataclasses import dataclass, field
 
 import indicators
-from market_data import Fundamentals, MarketDataError, get_provider
+from market_data import (Fundamentals, MarketDataError, MarketSnapshot,
+                         Quote, Tradability, load_market_json)
 
 # --------------------------------------------------------------------------
 # Policy — mirrors 50_Finance/trading-policy.md. Keep the two in sync.
@@ -59,16 +62,31 @@ from market_data import Fundamentals, MarketDataError, get_provider
 
 @dataclass
 class Policy:
-    max_position_pct: float = 5.0
+    # Position size is a percentage of RISK_BASE — declared investable capital —
+    # not of the agentic account balance. Sizing off the balance would let a
+    # transfer inflate the cap: move money in to fund a trade you like and "5%"
+    # quietly becomes 100%. The cap only constrains if its base is set
+    # independently of the trade in front of you.
+    risk_base: float = 20_000.0
+    max_position_pct: float = 5.0     # -> $1,000 max position
     max_positions: int = 10
     max_sector_pct: float = 30.0
     earnings_blackout_days: int = 3
-    max_drift_pct: float = 5.0       # how far past his entry is still "the trade"
-    min_avg_volume: float = 500_000  # shares/day; below this, slippage bites
+    max_drift_pct: float = 5.0        # how far past his entry is still "the trade"
+    min_avg_volume: float = 500_000   # shares/day; below this, slippage bites
+    max_spread_pct: float = 0.5       # bid/ask as % of mid
     require_invalidation: bool = True
+
+    @property
+    def max_position_value(self) -> float:
+        return self.risk_base * self.max_position_pct / 100.0
 
 
 SEVERITY_ORDER = {"block": 0, "warn": 1, "info": 2, "pass": 3}
+
+# Blocks that describe a fixable circumstance rather than a bad idea. These
+# yield WAIT (revisit later) instead of DISAGREE (don't take this trade).
+FIXABLE_BLOCKS = {"drift", "earnings", "invalidation", "funding"}
 
 
 @dataclass
@@ -134,6 +152,52 @@ def check_claim_completeness(call: dict, brief: Brief, policy: Policy) -> None:
         brief.add("invalidation", "pass",
                   f"Invalidation level: {call['invalidation']:.2f}")
 
+    if not call.get("thesis"):
+        brief.add("thesis", "warn", "No thesis text captured",
+                  "Without the reasoning you cannot tell later whether the "
+                  "thesis broke or just the price moved.")
+
+
+def check_drift(call: dict, last_price: float, brief: Brief,
+                policy: Policy) -> None:
+    """The highest-value check. If price has run past his entry, the trade
+    available today is not the trade he described."""
+    call_price = call.get("call_price")
+    if not call_price:
+        brief.unverified.append("price drift (no call price given)")
+        return
+
+    drift = (last_price - call_price) / call_price * 100.0
+    age = _age_in_days(call.get("call_date"))
+    age_text = f", call is {age} days old" if age is not None else ""
+
+    detail = (f"He called it at {call_price:.2f}; it is {last_price:.2f} now "
+              f"({drift:+.1f}%{age_text}).")
+
+    if drift > policy.max_drift_pct:
+        brief.add("drift", "block",
+                  f"Price has run {drift:+.1f}% past his entry "
+                  f"(limit {policy.max_drift_pct:.0f}%)",
+                  detail + " Entering here is a materially worse trade than "
+                           "the one he described: less upside to target, and "
+                           "your invalidation level is now further away.")
+    elif drift > policy.max_drift_pct / 2:
+        brief.add("drift", "warn", f"Price is {drift:+.1f}% above his entry",
+                  detail)
+    elif drift < -15.0:
+        brief.add("drift", "warn",
+                  f"Price is {drift:+.1f}% BELOW his entry", detail +
+                  " Cheaper than he paid — but check whether the thesis broke "
+                  "rather than assuming it's a discount.")
+    else:
+        brief.add("drift", "pass", f"Price is {drift:+.1f}% vs his entry", detail)
+
+    if age is not None and age > 90:
+        brief.add("staleness", "warn",
+                  f"Call is {age} days old",
+                  "His published portfolio updates quarterly; this may already "
+                  "have been superseded. Confirm he still holds it.")
+
 
 def check_levels_coherent(call: dict, last_price: float, brief: Brief) -> None:
     """The invalidation and target must make sense relative to entry.
@@ -186,52 +250,6 @@ def check_levels_coherent(call: dict, last_price: float, brief: Brief) -> None:
             else:
                 brief.add("risk_reward", "pass",
                           f"Risk/reward {ratio:.1f}:1 from current price")
-
-    if not call.get("thesis"):
-        brief.add("thesis", "warn", "No thesis text captured",
-                  "Without the reasoning you cannot tell later whether the "
-                  "thesis broke or just the price moved.")
-
-
-def check_drift(call: dict, last_price: float, brief: Brief,
-                policy: Policy) -> None:
-    """The highest-value check. If price has run past his entry, the trade
-    available today is not the trade he described."""
-    call_price = call.get("call_price")
-    if not call_price:
-        brief.unverified.append("price drift (no call price given)")
-        return
-
-    drift = (last_price - call_price) / call_price * 100.0
-    age = _age_in_days(call.get("call_date"))
-    age_text = f", call is {age} days old" if age is not None else ""
-
-    detail = (f"He called it at {call_price:.2f}; it is {last_price:.2f} now "
-              f"({drift:+.1f}%{age_text}).")
-
-    if drift > policy.max_drift_pct:
-        brief.add("drift", "block",
-                  f"Price has run {drift:+.1f}% past his entry "
-                  f"(limit {policy.max_drift_pct:.0f}%)",
-                  detail + " Entering here is a materially worse trade than "
-                           "the one he described: less upside to target, and "
-                           "your invalidation level is now further away.")
-    elif drift > policy.max_drift_pct / 2:
-        brief.add("drift", "warn", f"Price is {drift:+.1f}% above his entry",
-                  detail)
-    elif drift < -15.0:
-        brief.add("drift", "warn",
-                  f"Price is {drift:+.1f}% BELOW his entry", detail +
-                  " Cheaper than he paid — but check whether the thesis broke "
-                  "rather than assuming it's a discount.")
-    else:
-        brief.add("drift", "pass", f"Price is {drift:+.1f}% vs his entry", detail)
-
-    if age is not None and age > 90:
-        brief.add("staleness", "warn",
-                  f"Call is {age} days old",
-                  "His published portfolio updates quarterly; this may already "
-                  "have been superseded. Confirm he still holds it.")
 
 
 def check_technicals(read: indicators.TechnicalRead, call: dict,
@@ -335,9 +353,36 @@ def check_fundamentals(fund: Fundamentals, brief: Brief, policy: Policy) -> None
                   f"Fundamentals unavailable: {', '.join(sorted(set(fund.missing)))}")
 
 
-def check_tradability(fund: Fundamentals, last_price: float, account: dict,
-                      sizing: dict, brief: Brief, policy: Policy) -> None:
-    """Is this trade actually executable in this account, today."""
+def check_tradability(tradability: Tradability, quote: Quote,
+                      fund: Fundamentals, brief: Brief, policy: Policy) -> None:
+    """Can this actually be traded, on this account, right now.
+
+    Robinhood's tradability flags are authoritative — they know about halts and
+    account-level restrictions that volume and price cannot reveal.
+    """
+    if tradability.tradable is False:
+        reason = f" ({tradability.reason})" if tradability.reason else ""
+        brief.add("tradable", "block",
+                  f"Robinhood reports {fund.ticker} as not tradable on this "
+                  f"account{reason}")
+    elif tradability.tradable is True:
+        sessions = ", ".join(tradability.sessions) if tradability.sessions else "regular"
+        brief.add("tradable", "pass", f"Tradable ({sessions})")
+    else:
+        brief.unverified.append("tradability (not supplied)")
+
+    spread = quote.spread_pct
+    if spread is not None:
+        if spread > policy.max_spread_pct:
+            brief.add("spread", "warn",
+                      f"Bid/ask spread is {spread:.2f}% of mid",
+                      "Wide book — you pay this twice, on the way in and the "
+                      "way out.")
+        else:
+            brief.add("spread", "pass", f"Spread {spread:.2f}% of mid")
+    else:
+        brief.unverified.append("bid/ask spread")
+
     avg_vol = fund.avg_volume_10d
     if avg_vol is None:
         brief.unverified.append("average volume")
@@ -349,34 +394,48 @@ def check_tradability(fund: Fundamentals, last_price: float, account: dict,
     else:
         brief.add("liquidity", "pass", f"Average volume {avg_vol:,.0f}/day")
 
+
+def check_funding(account: dict, sizing: dict, brief: Brief) -> None:
+    """Is the cash in the right account to take this at full size?
+
+    A funding gap is not a reason to shrink the position — that quietly caps
+    winners while leaving losers full-size. It is a reason to say exactly how
+    much to move and wait. The agent never initiates a transfer.
+    """
     if not account:
-        brief.unverified.append("buying power and existing positions "
-                                "(no account data supplied)")
+        brief.unverified.append("buying power (no account data supplied)")
         return
 
-    cost = sizing.get("cost", 0.0)
+    cost = sizing.get("cost")
     buying_power = account.get("buying_power")
     settled_cash = account.get("settled_cash")
 
-    if buying_power is None:
+    if cost is None or buying_power is None:
         brief.unverified.append("buying power")
-    elif cost > buying_power:
-        brief.add("buying_power", "block",
-                  f"Position costs {cost:,.2f} but buying power is "
-                  f"{buying_power:,.2f}")
+        return
+
+    gap = sizing.get("funding_gap") or 0.0
+    if gap > 0:
+        brief.add("funding", "block",
+                  f"Need {cost:,.2f} but the agentic account has "
+                  f"{buying_power:,.2f} — transfer {gap:,.2f}",
+                  "The idea is fine; the cash is in the wrong account. Move "
+                  f"{gap:,.2f} into the agentic account and re-run. Do not "
+                  "size down to fit — that caps your winners and leaves your "
+                  "losers at full size.")
     else:
-        brief.add("buying_power", "pass",
+        brief.add("funding", "pass",
                   f"Cost {cost:,.2f} fits buying power {buying_power:,.2f}")
 
     # Agentic cash accounts settle T+1, so buying power can include funds that
     # are not actually spendable yet.
-    if (settled_cash is not None and buying_power is not None
-            and cost > settled_cash and settled_cash < buying_power):
+    if (settled_cash is not None and cost > settled_cash
+            and settled_cash < buying_power):
         brief.add("settlement", "warn",
                   f"Cost {cost:,.2f} exceeds settled cash {settled_cash:,.2f}",
-                  "On an agentic cash account, unsettled proceeds are not "
-                  "tradable for one business day. This order may be rejected "
-                  "or trigger a good-faith violation.")
+                  "This is a cash account: unsettled proceeds are not tradable "
+                  "for one business day. This order may be rejected or trigger "
+                  "a good-faith violation.")
 
 
 def check_policy(call: dict, account: dict, fund: Fundamentals, sizing: dict,
@@ -388,7 +447,6 @@ def check_policy(call: dict, account: dict, fund: Fundamentals, sizing: dict,
         return
 
     positions = account.get("positions") or []
-    account_value = account.get("account_value") or 0.0
     ticker = (call.get("ticker") or "").upper()
 
     held = next((p for p in positions
@@ -403,58 +461,77 @@ def check_policy(call: dict, account: dict, fund: Fundamentals, sizing: dict,
         brief.add("position_count", "pass",
                   f"{len(positions)} of {policy.max_positions} positions used")
 
-    if held and account_value > 0:
-        existing_pct = float(held.get("market_value", 0.0)) / account_value * 100.0
-        combined = existing_pct + sizing.get("target_pct", 0.0)
-        if combined > policy.max_position_pct:
+    # Existing exposure counts against the same cap, measured against the risk
+    # base rather than the account balance so it stays comparable.
+    if held:
+        existing = float(held.get("market_value", 0.0))
+        combined = existing + sizing.get("cost", 0.0)
+        if combined > policy.max_position_value:
             brief.add("position_size", "block",
-                      f"Already {existing_pct:.1f}% in {ticker}; adding would "
-                      f"reach {combined:.1f}% (max {policy.max_position_pct:.0f}%)")
+                      f"Already {existing:,.2f} in {ticker}; adding would reach "
+                      f"{combined:,.2f} (max {policy.max_position_value:,.2f})")
         else:
             brief.add("position_size", "pass",
-                      f"Existing {existing_pct:.1f}% + new = {combined:.1f}%")
+                      f"Existing {existing:,.2f} + new = {combined:,.2f} "
+                      f"(max {policy.max_position_value:,.2f})")
 
     # Sector concentration. Correlated names are one bet wearing many names.
     sector = fund.sector
-    if sector and account_value > 0:
+    if sector:
         sector_value = sum(
             float(p.get("market_value", 0.0)) for p in positions
             if str(p.get("sector", "")).lower() == sector.lower()
         )
-        new_pct = (sector_value + sizing.get("cost", 0.0)) / account_value * 100.0
+        new_value = sector_value + sizing.get("cost", 0.0)
+        new_pct = new_value / policy.risk_base * 100.0
         if new_pct > policy.max_sector_pct:
             brief.add("concentration", "warn",
-                      f"{sector} would be {new_pct:.0f}% of the account "
+                      f"{sector} would be {new_pct:.0f}% of the risk base "
                       f"(soft limit {policy.max_sector_pct:.0f}%)",
                       "His published book is concentrated US megacap tech. "
                       "Copying it in full is one macro bet held under eleven "
                       "names — they will draw down together.")
         else:
             brief.add("concentration", "pass",
-                      f"{sector} exposure would be {new_pct:.0f}%")
-    elif not sector:
+                      f"{sector} exposure would be {new_pct:.0f}% of risk base")
+    else:
         brief.unverified.append("sector concentration (sector unknown)")
 
 
 def compute_sizing(last_price: float, account: dict, policy: Policy) -> dict:
-    """Position size from the policy cap, not from conviction."""
-    account_value = (account or {}).get("account_value")
-    if not account_value:
-        return {"note": "No account value supplied — cannot size the position.",
-                "target_pct": policy.max_position_pct}
+    """Position size from the policy cap, not from conviction.
 
-    budget = account_value * policy.max_position_pct / 100.0
+    Sized against `policy.risk_base` — declared investable capital — so the cap
+    does not move when cash is shuffled between accounts. The agentic balance
+    then only determines whether the trade is *fundable right now*, which is a
+    separate question answered by check_funding.
+    """
+    budget = policy.max_position_value
     shares = int(math.floor(budget / last_price)) if last_price > 0 else 0
-    cost = shares * last_price
-    return {
-        "account_value": account_value,
+    cost = round(shares * last_price, 2)
+
+    sizing = {
+        "risk_base": policy.risk_base,
         "target_pct": policy.max_position_pct,
         "budget": round(budget, 2),
         "price": round(last_price, 2),
         "shares": shares,
-        "cost": round(cost, 2),
-        "actual_pct": round(cost / account_value * 100.0, 2) if account_value else None,
+        "cost": cost,
     }
+
+    if shares == 0:
+        sizing["note"] = (
+            f"One share costs {last_price:,.2f}, above the "
+            f"{budget:,.2f} position cap. Either skip this name or take it as "
+            f"a fractional order (market orders, regular hours only)."
+        )
+
+    buying_power = (account or {}).get("buying_power")
+    if buying_power is not None:
+        sizing["buying_power"] = buying_power
+        sizing["funding_gap"] = round(max(0.0, cost - float(buying_power)), 2)
+
+    return sizing
 
 
 # --------------------------------------------------------------------------
@@ -469,18 +546,21 @@ def decide(brief: Brief) -> None:
     """
     blocks = brief.blocks
     if blocks:
-        drift_block = any(c.name == "drift" for c in blocks)
-        fixable = {"drift", "earnings", "invalidation"}
-        if all(c.name in fixable for c in blocks):
+        block_names = {c.name for c in blocks}
+        if block_names <= FIXABLE_BLOCKS:
             brief.verdict = "WAIT"
             brief.reason = (
                 "The idea may be sound but this entry is not takeable as-is: "
                 + "; ".join(c.message for c in blocks) + "."
             )
-            if drift_block:
+            if "drift" in block_names:
                 brief.reason += (
                     " Re-check if it pulls back toward his entry, or re-size "
                     "against a fresh invalidation level."
+                )
+            if "funding" in block_names:
+                brief.reason += (
+                    " Move the cash, then re-run — do not size down to fit."
                 )
         else:
             brief.verdict = "DISAGREE"
@@ -506,24 +586,25 @@ def decide(brief: Brief) -> None:
 # Pipeline
 # --------------------------------------------------------------------------
 
-def verify(call: dict, account: dict | None = None,
-           policy: Policy | None = None, provider=None) -> Brief:
+def verify(call: dict, snapshot: MarketSnapshot, account: dict | None = None,
+           policy: Policy | None = None) -> Brief:
     policy = policy or Policy()
     account = account or {}
-    provider = provider or get_provider()
 
     ticker = (call.get("ticker") or "").strip().upper()
     if not ticker:
         raise ValueError("call must include a 'ticker'")
+    if ticker != snapshot.ticker:
+        raise ValueError(
+            f"call is for {ticker} but market data is for {snapshot.ticker}"
+        )
 
     brief = Brief(ticker=ticker)
     check_claim_completeness(call, brief, policy)
 
-    df = provider.history(ticker, period="1y", interval="1d")
-    read = indicators.analyze(df, ticker)
-    last_price = read.last_close
-
-    fund = provider.fundamentals(ticker)
+    read = indicators.analyze(snapshot.bars, ticker)
+    last_price = snapshot.last_price
+    fund = snapshot.fundamentals
     sizing = compute_sizing(last_price, account, policy)
     brief.sizing = sizing
 
@@ -531,7 +612,8 @@ def verify(call: dict, account: dict | None = None,
     check_levels_coherent(call, last_price, brief)
     check_technicals(read, call, brief)
     check_fundamentals(fund, brief, policy)
-    check_tradability(fund, last_price, account, sizing, brief, policy)
+    check_tradability(snapshot.tradability, snapshot.quote, fund, brief, policy)
+    check_funding(account, sizing, brief)
     check_policy(call, account, fund, sizing, brief, policy)
 
     brief.checks.sort(key=lambda c: SEVERITY_ORDER[c.severity])
@@ -578,17 +660,20 @@ def render(brief: Brief) -> str:
         add("")
 
     sizing = brief.sizing
-    if sizing.get("shares") is not None:
-        add("SIZING (policy cap, not conviction)")
-        add("-" * 68)
-        add(f"  {sizing['shares']} shares @ {sizing['price']} = "
-            f"{sizing['cost']:,.2f}  ({sizing.get('actual_pct')}% of account)")
-        add("")
-    elif sizing.get("note"):
-        add("SIZING")
-        add("-" * 68)
-        add(f"  {sizing['note']}")
-        add("")
+    add("SIZING (policy cap, not conviction)")
+    add("-" * 68)
+    add(f"  Risk base {sizing.get('risk_base', 0):,.0f} × "
+        f"{sizing.get('target_pct', 0):.0f}% = "
+        f"{sizing.get('budget', 0):,.2f} max position")
+    if sizing.get("shares"):
+        add(f"  {sizing['shares']} shares @ {sizing['price']:,.2f} = "
+            f"{sizing['cost']:,.2f}")
+    if sizing.get("note"):
+        add(_wrap(sizing["note"], indent="  "))
+    if sizing.get("funding_gap"):
+        add(f"  TRANSFER NEEDED: {sizing['funding_gap']:,.2f} "
+            f"(have {sizing.get('buying_power', 0):,.2f})")
+    add("")
 
     if brief.unverified:
         add("COULD NOT VERIFY")
@@ -623,6 +708,28 @@ def _age_in_days(call_date) -> int | None:
     return (dt.date.today() - parsed).days
 
 
+RISK_PROFILE_PATH = "50_Finance/private/risk-profile.json"
+
+
+def _load_risk_base() -> float | None:
+    """Read the declared risk base from the gitignored private profile.
+
+    Lives outside the committed policy because it reveals portfolio size. If it
+    is absent the Policy default applies — and the brief still shows which base
+    it sized against, so a wrong number is visible rather than silent.
+    """
+    import os
+    for candidate in (RISK_PROFILE_PATH,
+                      os.path.join("..", RISK_PROFILE_PATH)):
+        try:
+            with open(candidate, encoding="utf-8") as handle:
+                value = json.load(handle).get("risk_base")
+                return float(value) if value else None
+        except (FileNotFoundError, json.JSONDecodeError, TypeError, ValueError):
+            continue
+    return None
+
+
 def _load(path: str | None) -> dict:
     if not path:
         return {}
@@ -634,6 +741,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Verify a trade idea against market data and policy.")
     parser.add_argument("--call", help="Path to call JSON")
+    parser.add_argument("--market", required=True,
+                        help="Path to market JSON (assembled from Robinhood MCP)")
     parser.add_argument("--account", help="Path to account JSON")
     parser.add_argument("--ticker")
     parser.add_argument("--call-price", type=float)
@@ -642,6 +751,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--invalidation", type=float)
     parser.add_argument("--direction", default="buy")
     parser.add_argument("--thesis", default="")
+    parser.add_argument("--risk-base", type=float,
+                        help="Override declared investable capital")
     parser.add_argument("--json", action="store_true",
                         help="Emit JSON instead of the text brief")
     parser.add_argument("--allow-missing-invalidation", action="store_true",
@@ -657,13 +768,16 @@ def main(argv: list[str] | None = None) -> int:
         if value:
             call[key] = value
 
-    if not call.get("ticker"):
-        parser.error("a ticker is required (via --call file or --ticker)")
-
     policy = Policy(require_invalidation=not args.allow_missing_invalidation)
+    risk_base = args.risk_base or _load_risk_base()
+    if risk_base:
+        policy.risk_base = risk_base
 
     try:
-        brief = verify(call, _load(args.account), policy)
+        snapshot = load_market_json(args.market)
+        if not call.get("ticker"):
+            call["ticker"] = snapshot.ticker
+        brief = verify(call, snapshot, _load(args.account), policy)
     except MarketDataError as exc:
         print(f"Market data error: {exc}", file=sys.stderr)
         return 2

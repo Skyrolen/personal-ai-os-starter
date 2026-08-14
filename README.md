@@ -39,9 +39,9 @@ personal-ai-os-starter/
 │   └── claude-code-notifier.sh ← Optional notification helper
 ├── 50_Finance/
 │   └── trading-policy.md      ← Hard rules the financial agent must obey
-├── tools/                     ← Python analysis engine (market data + indicators)
+├── tools/                     ← Offline analysis engine (no network access)
 │   ├── indicators.py          ← SMA/EMA, RSI, MACD, ATR, support/resistance
-│   ├── market_data.py         ← yfinance provider (swappable)
+│   ├── market_data.py         ← Parses market.json assembled from Robinhood MCP
 │   └── verify.py              ← Trade-idea verification pipeline
 ├── docs/
 │   └── TRADING-SETUP.md       ← Robinhood MCP + Chrome profile setup
@@ -168,12 +168,20 @@ same bet. `/bora-check` tests for exactly those.
 
 - **The agent never places an order on its own.** It analyses, sizes to your
   policy, runs Robinhood's `review_equity_order` simulation, and stops for your
-  approval of that specific ticket.
+  approval of that specific ticket. It also never moves money between accounts.
+- **Position size is a percentage of a declared risk base**, not of the trading
+  account's balance. If you top the account up per trade, sizing off its balance
+  means the cap moves with the trade it is meant to constrain — so a transfer
+  would quietly turn "5%" into 100%.
 - **Rules live in `50_Finance/trading-policy.md`** — position caps, earnings
   blackout, liquidity floor, circuit breakers — and the agent must refuse to
   break them, including when you ask it to in the moment.
-- **Personal data stays out of git.** Trade logs, balances, and any subscriber
-  content live in `50_Finance/private/`, which is gitignored.
+- **All market data comes from the broker's own MCP server**, so tradability and
+  liquidity are authoritative for the venue you execute on. The Python layer
+  makes no network calls at all: it only does arithmetic on data the agent
+  fetched.
+- **Personal data stays out of git.** Trade logs, balances, account numbers and
+  any subscriber content live in `50_Finance/private/`, which is gitignored.
 
 Setup, limits, and what it deliberately does *not* do:
 **[docs/TRADING-SETUP.md](docs/TRADING-SETUP.md)**

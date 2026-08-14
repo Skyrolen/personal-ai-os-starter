@@ -300,7 +300,7 @@ def _classify_macd(res: MacdResult) -> str:
 
 
 def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
-    """Accept Open/open/OPEN and yfinance's occasional MultiIndex columns."""
+    """Accept Open/open/OPEN and flatten any MultiIndex columns."""
     out = df.copy()
     if isinstance(out.columns, pd.MultiIndex):
         out.columns = out.columns.get_level_values(0)

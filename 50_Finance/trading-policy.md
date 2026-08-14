@@ -37,15 +37,45 @@ the point of having it.
 
 | Limit | Value |
 |---|---|
-| Max single position | **5%** of the agentic account |
+| Max single position | **5% of the risk base** (see Rule 1a) |
 | Max open positions | **10** |
 | Max single sector | **30%** (soft — warns, does not block) |
 
-Sizing is computed from the account value at the time of the trade, rounded
-**down** to whole shares. A strong thesis does not earn a bigger position; that
-is exactly the trade that hurts most when it is wrong.
+Sizing is rounded **down** to whole shares. A strong thesis does not earn a
+bigger position; that is exactly the trade that hurts most when it is wrong.
 
-Adding to an existing name counts toward the same 5% cap.
+Adding to an existing name counts toward the same cap.
+
+## Rule 1a — The cap is a percentage of the risk base, never of the agentic balance
+
+The **risk base** is my declared investable capital. It lives in
+`50_Finance/private/risk-profile.json` (gitignored — it reveals portfolio size)
+and it changes only by deliberate edit, never as a side effect of a trade.
+
+This distinction is the whole point of the rule. I fund the agentic account
+*per trade*. If position size were a percentage of that balance, the cap would
+move with the trade it is supposed to constrain: transfer money in to fund a
+position I have already decided I like, and "5%" quietly becomes 100%. A cap I
+can inflate by moving my own money between my own accounts is not a cap.
+
+So:
+
+- **Risk base → how much I am allowed to risk.** Set in advance, in the cold.
+- **Agentic balance → what is fundable right now.** A logistics fact, not a
+  risk decision.
+
+When a full-size position exceeds the agentic balance, the brief reports the
+**exact amount to transfer** and stops. It must **not** size down to fit:
+shrinking positions to match available cash caps my winners while leaving my
+losers at full size, which is precisely backwards.
+
+Raising the risk base raises every position cap at once. That is an amendment,
+made on a day I am not trying to place a trade.
+
+## Rule 1b — The agent never moves money
+
+Claude reports what to transfer. I make every transfer myself, in the Robinhood
+app. The agent has no transfer tools and must never be given any.
 
 ## Rule 2 — Every entry needs an invalidation level
 
@@ -94,11 +124,22 @@ all fall together in a rate shock is **one position**, not eleven.
 When a new name pushes a sector past 30%, the brief must say so plainly. I may
 proceed — but not while telling myself I am diversified.
 
-## Rule 7 — Cash settlement
+## Rule 7 — The agentic account is a cash account
 
-The agentic cash account settles **T+1**. Buying power can include funds that
-are not yet spendable. If a proposed cost exceeds settled cash, the brief must
-flag the good-faith-violation risk before I approve.
+Confirmed live, not assumed. Consequences that bind:
+
+- **T+1 settlement.** Proceeds from a sale are not spendable for one business
+  day. Buying power can include unsettled funds; if a proposed cost exceeds
+  settled cash, the brief must flag the good-faith-violation risk before I
+  approve.
+- **Equities only.** Its `option_level` is empty, so no options there
+  regardless of what the MCP's option tools expose or what my main account can
+  do.
+- **Only that account.** My main margin account and my Roth IRA both report
+  `agentic_allowed: false` and are invisible to the agent. If Claude ever finds
+  itself reading or proposing against either, something is wrong — stop and
+  tell me. The account number is in `risk-profile.json`; always pass it
+  explicitly rather than defaulting to whatever `get_accounts` returns first.
 
 ## Rule 8 — Log first, always
 
@@ -139,3 +180,5 @@ job at that moment is friction rather than helpfulness.
 | Date | Change | Why |
 |---|---|---|
 | 2026-08-14 | Initial policy | Set up alongside the Robinhood agentic account and `/bora-check` |
+| 2026-08-14 | Added Rules 1a/1b: risk base, no transfers | Sizing off the agentic balance did not constrain anything, because I fund that account per trade. Anchored the cap to declared capital instead. |
+| 2026-08-14 | Rule 7 rewritten from live account facts | Confirmed cash type, T+1, equities-only, and that the other two accounts are `agentic_allowed: false`. |

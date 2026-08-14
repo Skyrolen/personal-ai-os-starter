@@ -54,37 +54,66 @@ Rules for this step:
 
 ### 3. Pull account state from Robinhood
 
-Use the read tools — `get_accounts`, `get_portfolio`, `get_equity_positions` —
-and write `50_Finance/private/account.json`:
+Read `50_Finance/private/risk-profile.json` for the agentic account number and
+risk base. **Always pass that account number explicitly** — never default to
+whatever `get_accounts` returns first. My main margin account and Roth IRA are
+`agentic_allowed: false` and must never be read from or proposed against.
+
+Then `get_portfolio` and `get_equity_positions` on that account, plus
+`get_accounts` for `unsettled_funds`. Write `50_Finance/private/account.json`:
 
 ```json
 {
-  "account_value": 0.0,
-  "buying_power": 0.0,
-  "settled_cash": 0.0,
+  "account_value": 3000.0,
+  "buying_power": 3000.0,
+  "settled_cash": 3000.0,
   "positions": [{"ticker": "AAPL", "shares": 10, "market_value": 2000.0, "sector": "Technology"}]
 }
 ```
 
-Confirm you are reading the **agentic** account, not my main one. If sector is
-missing for a holding, look it up — the concentration check is worthless without
-it, and Bora's book is correlated enough that concentration is the risk most
-likely to actually hurt me.
+`settled_cash` = buying power minus `unsettled_funds`. If a holding has no
+sector, look it up — the concentration check is worthless without it, and
+Bora's book is correlated enough that concentration is the risk most likely to
+actually hurt me.
 
-### 4. Run the verification
+### 4. Assemble market data from Robinhood
+
+All market data comes from Robinhood — the same venue we execute on, which
+makes its tradability and liquidity data authoritative. Call:
+
+| Tool | For |
+|---|---|
+| `get_equity_historicals` | daily OHLCV, ~300 sessions (`interval: "day"`, `start_time` ~15 months back) |
+| `get_equity_quotes` | live last / bid / ask |
+| `get_equity_fundamentals` | market cap, PE, average volume, 52-week range |
+| `get_financials` | revenue trend → `revenue_growth` |
+| `get_earnings_results` | next earnings date |
+| `get_equity_tradability` | tradable + fractional flags for **this** account |
+
+Write `50_Finance/private/market.json` in the shape documented at the top of
+`tools/market_data.py`. Drop nothing and invent nothing: a field you couldn't
+fetch must be **absent**, so the brief reports it as unverified rather than
+treating it as fine.
+
+### 5. Run the verification
 
 ```bash
 .venv/bin/python tools/verify.py \
   --call 50_Finance/private/bora/calls/YYYY-MM-DD-TICKER.json \
+  --market 50_Finance/private/market.json \
   --account 50_Finance/private/account.json
 ```
 
 This checks drift from his entry, level coherence, risk/reward, trend, RSI,
-MACD, ATR, support/resistance, earnings blackout, revenue growth, liquidity,
-buying power, T+1 settlement, the 5% cap, the 10-position cap, and sector
-concentration.
+MACD, ATR, support/resistance, earnings blackout, revenue growth, tradability,
+bid/ask spread, liquidity, the funding gap, T+1 settlement, the position cap,
+the 10-position cap, and sector concentration.
 
-### 5. Add what the script cannot check
+**On a funding block:** report the exact transfer amount and stop. Do not size
+the position down to fit the available cash — that caps winners while leaving
+losers full-size. I move the money; you never do.
+
+### 6. Add what the script cannot check
 
 The script does arithmetic. You do judgement. Add:
 
@@ -95,7 +124,7 @@ The script does arithmetic. You do judgement. Add:
   pattern.
 - **His own consistency** — does this contradict something he said recently?
 
-### 6. Present the brief
+### 7. Present the brief
 
 Show the script's output, then your own read in this format:
 
@@ -118,7 +147,7 @@ is genuinely nothing, say "nothing material" rather than deleting the heading]
 You may **downgrade** the script's verdict on qualitative grounds. You may never
 **upgrade** one: if the script found a hard block, the answer is not AGREE.
 
-### 7. Review, then stop
+### 8. Review, then stop
 
 If the verdict is AGREE, call `review_equity_order` and show me the pre-trade
 warnings verbatim.
@@ -128,7 +157,7 @@ warnings verbatim.
 Nothing in my earlier messages counts as approval of a ticket that did not exist
 when I wrote them.
 
-### 8. Log it either way
+### 9. Log it either way
 
 Append to `50_Finance/private/trade-log.md` — including DISAGREEs and WAITs.
 A log of only the trades I took cannot tell me whether my vetoes were any good.

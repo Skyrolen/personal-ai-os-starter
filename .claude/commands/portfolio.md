@@ -12,10 +12,15 @@ Read `50_Finance/trading-policy.md` first. Every limit below comes from there.
 
 ### 2. Pull live state
 
-Use `get_accounts`, `get_portfolio`, `get_equity_positions`, and
-`get_equity_orders`. Confirm you are on the **agentic** account.
+Read `50_Finance/private/risk-profile.json` for the agentic account number and
+risk base. **Pass that account number explicitly to every call.** My main
+margin account and Roth IRA are `agentic_allowed: false` — if you find yourself
+reading either, stop and tell me.
 
-For each holding get the current quote via `get_equity_quotes`, and the sector
+Then: `get_portfolio`, `get_equity_positions`, `get_equity_orders`, and
+`get_accounts` for `unsettled_funds`.
+
+For each holding: `get_equity_quotes` for the current price, and the sector
 (look it up if Robinhood doesn't supply it).
 
 ### 3. Check each position against its thesis
@@ -23,13 +28,13 @@ For each holding get the current quote via `get_equity_quotes`, and the sector
 Cross-reference `50_Finance/private/trade-log.md` for why each position was
 opened and what its invalidation level was.
 
-For every holding, run:
+For a fresh technical read on a holding, pull `get_equity_historicals`
+(`interval: "day"`, ~300 sessions) plus `get_earnings_results`, and use
+`get_realized_pnl` / `get_pnl_trade_history` for closed-trade performance.
 
-```bash
-.venv/bin/python tools/verify.py --ticker TICKER --json
-```
-
-to get a fresh technical read and the next earnings date.
+All percentages are against the **risk base** from `risk-profile.json`, not the
+agentic account balance — the balance moves when I transfer cash, so measuring
+against it would make concentration look better simply because I funded a trade.
 
 ### 4. Report
 
@@ -44,7 +49,7 @@ Account value, cash, settled cash, day P&L, total P&L, positions used of 10.
 Status is `OK`, `WATCH`, or `BREACH`.
 
 ### Policy check
-- Any position over the 5% cap
+- Any position over the cap (5% of the risk base)
 - Position count vs the 10 limit
 - **Sector concentration** — if tech is over 30%, say so plainly and say what it
   means: those names fall together, so the real number of independent bets here

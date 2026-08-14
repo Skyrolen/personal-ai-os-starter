@@ -16,8 +16,14 @@ overrides me if I contradict it while trying to place a trade.
 Here is his call:
 [PASTE HIS POST / VIDEO NOTES / SCREENSHOT]
 
-My account: value $____, buying power $____, settled cash $____
+My risk base (declared investable capital): $____
+My trading account buying power: $____, settled cash: $____
 Current positions: [TICKER, shares, value, sector — or "none"]
+
+Size positions as 5% of the RISK BASE, never as 5% of the account balance. I
+top the account up per trade, so sizing off the balance would let a transfer
+inflate the cap — move money in to fund a trade I already like and "5%" quietly
+becomes 100%. The balance only tells us what is fundable right now.
 
 Work through this:
 
@@ -45,9 +51,12 @@ Work through this:
    buying power? Note that unsettled cash may not be spendable for one business
    day.
 
-7. POLICY: max 5% of the account in one name, max 10 positions, and flag sector
-   concentration above 30%. Note that a book of correlated tech names is one bet
-   held under several tickers, not several bets.
+7. POLICY: max 5% of the risk base in one name, max 10 positions, and flag
+   sector concentration above 30%. Note that a book of correlated tech names is
+   one bet held under several tickers, not several bets.
+   If a full-size position costs more than my available cash, tell me the EXACT
+   amount to transfer and stop. Do not size the position down to fit — that
+   caps my winners while leaving my losers at full size.
 
 8. VERDICT: AGREE / AGREE (with caveats) / WAIT / DISAGREE.
    Then give me, in this order:

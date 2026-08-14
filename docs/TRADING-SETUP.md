@@ -32,13 +32,38 @@ claude mcp add robinhood-trading --transport http https://agent.robinhood.com/mc
 
 ### Tools this exposes
 
-| Read | Trade |
+| Purpose | Tools |
 |---|---|
-| `get_accounts`, `get_portfolio`, `get_equity_positions`, `get_equity_quotes`, `get_equity_orders`, `search` | `review_equity_order`, `place_equity_order`, `cancel_equity_order` |
+| Account | `get_accounts`, `get_portfolio`, `get_equity_positions`, `get_equity_orders`, `get_equity_tax_lots` |
+| Market data | `get_equity_historicals` (OHLCV), `get_equity_quotes`, `get_equity_price_book` (L2), `get_equity_technical_indicators` |
+| Fundamentals | `get_equity_fundamentals`, `get_financials`, `get_earnings_results`, `get_earnings_calendar` |
+| Pre-trade | `get_equity_tradability`, `review_equity_order` |
+| Execution | `place_equity_order`, `cancel_equity_order` |
+| Performance | `get_realized_pnl`, `get_pnl_trade_history` |
 
 `review_equity_order` simulates and returns pre-trade warnings; it moves no
 money. `place_equity_order` is the only one that does, and per Rule 0 it needs
 your explicit approval of that exact ticket.
+
+**All market data comes from here** — no third-party feed. Robinhood's
+tradability and price-book data are authoritative for the venue we execute on,
+which no external source can be.
+
+### Your account layout
+
+Recorded in `50_Finance/private/risk-profile.json` (gitignored):
+
+| Account | Type | Agent access |
+|---|---|---|
+| ••••2975 "Agentic" | cash | **yes** — the only one the agent can touch |
+| ••••9457 (default) | margin | no (`agentic_allowed: false`) |
+| ••••7439 | Roth IRA | no (`agentic_allowed: false`) |
+
+The agentic account is a **cash** account: T+1 settlement, good-faith
+violations apply, and `option_level` is empty so it is equities-only.
+
+Always pass the account number explicitly. Never let the agent default to
+whatever `get_accounts` returns first.
 
 ---
 
@@ -82,20 +107,40 @@ His content is subscriber-only: read it for your own decisions, keep extracts in
 
 ```bash
 python3 -m venv .venv
-.venv/bin/pip install -r tools/requirements.txt
+.venv/bin/pip install -r tools/requirements.txt   # pandas + numpy only
 ```
 
 Confirm it works:
 
 ```bash
-.venv/bin/python tools/test_indicators.py   # 30 checks, offline
-.venv/bin/python tools/test_verify.py       # 18 groups, offline
-.venv/bin/python tools/verify.py --ticker AAPL --call-price 200 --call-date 2026-08-01
+.venv/bin/python tools/test_indicators.py   # 30 checks
+.venv/bin/python tools/test_verify.py       # 23 groups
 ```
 
-The two test files run offline against synthetic data. The third needs network
-access to Yahoo Finance — if it fails with a connection error, your network is
-blocking `query1.finance.yahoo.com`.
+Both run fully offline. **Nothing under `tools/` touches the network** — the
+agent fetches market data via MCP and writes `market.json`; Python only does
+arithmetic on it. That keeps the policy math deterministic and impossible to
+run against accidentally-stale live state.
+
+## 3a. Your risk profile
+
+`50_Finance/private/risk-profile.json` (gitignored) holds the numbers the
+public policy file deliberately omits:
+
+```json
+{
+  "risk_base": 20000.0,
+  "agentic_account": "539562975"
+}
+```
+
+**`risk_base` is the number that controls your risk.** Position size is 5% of
+it — not 5% of the agentic balance. That distinction is the point: you fund the
+agentic account per trade, so sizing off its balance would let a transfer
+inflate the cap. See Rule 1a in the policy.
+
+Raising `risk_base` raises every position cap at once. Change it deliberately,
+on a day you are not placing a trade.
 
 ---
 
@@ -129,11 +174,12 @@ Add to `.claude/settings.json` so the tools run without a prompt each time:
 - **No backtesting of his historical record.** That needs his timestamped call
   history, which isn't available. The scorecard builds that record going
   forward instead — expect it to mean nothing for the first ~20 calls.
-- **No options, crypto, or futures.** Robinhood's agentic MCP is equities-only
-  in beta.
-- **No intraday or real-time execution.** yfinance data is delayed, and the
-  design targets Bora's quarterly horizon. Don't repurpose this for day trading;
-  none of the checks are calibrated for it.
+- **No transfers.** The agent reports the exact amount to move between accounts;
+  you move it. It has no transfer tools and must never be given any.
+- **No options or crypto** in the agentic account — its `option_level` is empty.
+- **No intraday or real-time execution.** The design targets Bora's quarterly
+  horizon. Don't repurpose this for day trading; none of the checks are
+  calibrated for it, and the agentic account is a cash account (T+1) anyway.
 - **No advice.** It verifies, sizes, and reports. Every trade remains your
   decision and your risk, and a trade that passes every check can still lose the
   whole position.
