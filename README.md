@@ -33,6 +33,7 @@ personal-ai-os-starter/
 │   │   ├── weekly-review.md   ← /weekly-review - end-of-week reflection
 │   │   ├── remind-me-at.md    ← /remind-me-at - schedule a reminder
 │   │   ├── execute-at.md      ← /execute-at - schedule a command
+│   │   ├── bora-scan.md       ← /bora-scan - crawl their platform into local files
 │   │   ├── bora-check.md      ← /bora-check - verify a trade idea before acting
 │   │   ├── bora-portfolio.md  ← /bora-portfolio - diff their book against yours
 │   │   ├── portfolio.md       ← /portfolio - review holdings against policy
@@ -151,6 +152,7 @@ codex
 | **Weekly Review** | End-of-week reflection | `/weekly-review` | Say "weekly review" | Paste `prompts/weekly-review.md` |
 | **Remind Me At** | One-shot reminder | `/remind-me-at +20m Call Sarah` | - | - |
 | **Execute At** | Schedule a command to run later | `/execute-at 9am /daily-plan` | - | - |
+| **Bora Scan** | Crawl their platform into local files | `/bora-scan` | - | - |
 | **Bora Check** | Verify a trade idea before acting | `/bora-check NVDA` | - | Paste `prompts/bora-check.md` |
 | **Bora Portfolio** | Diff his book against yours | `/bora-portfolio` | - | Paste `prompts/bora-portfolio.md` |
 | **Portfolio** | Review holdings against policy | `/portfolio` | - | Paste `prompts/portfolio.md` |

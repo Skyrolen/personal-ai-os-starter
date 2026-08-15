@@ -15,6 +15,10 @@ my sleeve weights and risk base.
 
 ### 1. Read his dashboard
 
+If `/bora-scan` has run recently, use the latest file in
+`50_Finance/private/bora/snapshots/` instead of re-crawling, and say which
+snapshot you used and how old it is. Re-crawl only if it's stale or missing.
+
 Via Chrome DevTools MCP against my logged-in debug profile:
 `https://portfolio-platform-production-7518.up.railway.app/`
 

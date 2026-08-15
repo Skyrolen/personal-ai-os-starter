@@ -134,8 +134,18 @@ the ceiling** rather than assuming a size.
 - **His own signal** — is his Porttech tag Kritik/İzle? Is he *selling* this
   name? Check `Son İşlemler`: a recent **Satış** in a name you're about to buy
   is the single most important thing on the page.
+- **Does he follow his own method?** If `50_Finance/private/bora/method.md`
+  exists (written by `/bora-scan` from `Bora'nın Felsefesi` and
+  `Trend & Çıkış Planı`), compare his current behaviour against his stated
+  rules. A position sitting well through a level he says he exits at is a real
+  signal: either the rule is softer than stated, or he is not applying it here.
+  Say which you think it is, and say it is a judgement call.
+  If `method.md` is absent, say so and skip — do not guess at his rules.
 - **Scale** — his position may be 10%+ of a $2.4M book. Yours is capped near
   $1,000. Never present his conviction as transferable to your size.
+- **Skool cross-check** — if a recent post in `50_Finance/private/bora/skool/`
+  discusses this name, does it match what the dashboard shows him doing?
+  Talking a name up while reducing it is worth surfacing.
 
 ### 8. Present the brief
 
@@ -143,6 +153,8 @@ the ceiling** rather than assuming a size.
 
 **What he did:** [bought N at $X on date] *or* [holds N lots, avg cost $X, K/Z +N%]
 **His own tag:** [Porttech score and label]
+**Follows his own rules here:** [yes / no / can't tell — one line, or "method not
+captured yet" if `method.md` is absent]
 **What the data says:** [one line]
 **Verdict:** AGREE / AGREE (with caveats) / WAIT / DISAGREE
 

@@ -162,10 +162,32 @@ Add to `.claude/settings.json` so the tools run without a prompt each time:
 
 | Command | What it does |
 |---|---|
-| `/bora-check [ticker or pasted post]` | Verify one of his calls, produce a sized ticket, stop for approval |
-| `/portfolio` | Read-only review of holdings against policy |
+| `/bora-scan` | Crawl his platform + Skool into `50_Finance/private/bora/` |
+| `/bora-portfolio` | Diff his book against yours, sleeve by sleeve |
+| `/bora-check [ticker or pasted row]` | Verify one position, propose a size, stop for approval |
+| `/portfolio` | Read-only review of your holdings against policy |
 | `/trade-log log` | Journal a decision |
-| `/trade-log review` | Weekly scoring, including his hit rate |
+| `/trade-log review` | Weekly scoring, including his hit rate and your overrides |
+
+Run them in that order: **scan → portfolio → check**. The scan writes files the
+other two read, so a `/bora-check` after a fresh scan needs far less browsing.
+
+### What the scan collects
+
+Everything lands in `50_Finance/private/bora/` (gitignored):
+
+| File | Content |
+|---|---|
+| `snapshots/YYYY-MM-DD-dashboard.md` | header stats, sleeve allocation, all five position tables |
+| `transactions.md` | append-only ledger from `İşlem Geçmişi` — the real signal feed |
+| `method.md` | his philosophy and exit rules, in his words |
+| `skool/YYYY-MM-DD-posts.md` | recent + pinned posts, tickers flagged |
+| `watchlist.md` | what he holds that you don't, sorted by K/Z ascending |
+
+`method.md` is the one worth capturing carefully. With his stated rules on file,
+`/bora-check` can ask whether his *current behaviour matches his own method* —
+a position held well through a level he says he exits at is a signal that market
+data alone cannot show you.
 
 ---
 
