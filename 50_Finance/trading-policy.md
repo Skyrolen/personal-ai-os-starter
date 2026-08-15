@@ -72,6 +72,60 @@ losers at full size, which is precisely backwards.
 Raising the risk base raises every position cap at once. That is an amendment,
 made on a day I am not trying to place a trade.
 
+## Rule 1c — Sleeves
+
+The risk base is divided into **virtual sleeves** mirroring Bora's
+sub-portfolios. Weights, per-sleeve position limits, and per-sleeve drift limits
+live in `risk-profile.json`.
+
+There is only **one** agentic Robinhood account. The sleeves are bookkeeping,
+enforced by `verify.py` and recorded in the trade log — not separate accounts.
+That means sleeve discipline holds only as long as I keep tagging positions
+honestly. A position with no sleeve tag is a position outside the system.
+
+- A sleeve's budget is spent only on that sleeve. **Never borrow headroom from
+  another sleeve** — that is how the structure stops meaning anything.
+- **P5 Opsiyon cannot be traded**: my agentic account has no options level. Its
+  share is held as cash. This is structural, not a judgement about any idea.
+- His weights were captured once, from a snapshot. When he rebalances, mine are
+  silently wrong. `/bora-portfolio` flags drift; updating the weights is a
+  deliberate edit to `risk-profile.json`, not something the agent does for me.
+
+## Rule 1d — Drift is tiered by source
+
+- **A dated transaction** from his history has a real entry price. Strict limit:
+  **5%**.
+- **An average cost** from a holdings table is a blend across many buys. It is a
+  reference point, not a signal. Looser limit, set per sleeve — 20% for P1, 15%
+  for P2, 5% for P4.
+
+Judging a long-term average by the transaction rule would block every winner he
+owns and leave only his losers, which is its own kind of adverse selection.
+
+## Rule 1e — Position size: I decide, on the record
+
+The agent **proposes and asks**. It never sizes a position silently and never
+places one.
+
+1. It computes a **recommended** size — equal weight within the sleeve, capped —
+   and states it concretely: shares, cost, % of sleeve, % of risk base.
+2. It shows the **ceiling**: the lower of 5% of the risk base and 25% of the
+   sleeve, plus the sleeve headroom left.
+3. It asks, and **stops**.
+4. I confirm or name a different amount. At or below the ceiling, it proceeds
+   without argument.
+5. **Above the ceiling it is not refused** — it is flagged, quoted against this
+   rule, and requires me to say plainly that I am overriding. Then it is
+   **logged as an override**.
+
+I know the risk I am accepting here: a cap I set in the moment, on a trade I
+already like, is weaker than one set in advance. The override log is the
+mitigation — the weekly review reports how my overrides actually performed, so
+the cap gets raised on evidence or stays put on evidence.
+
+Approving a **size** is not approving the **order**. Rule 0 still applies to the
+ticket.
+
 ## Rule 1b — The agent never moves money
 
 Claude reports what to transfer. I make every transfer myself, in the Robinhood
@@ -182,3 +236,4 @@ job at that moment is friction rather than helpfulness.
 | 2026-08-14 | Initial policy | Set up alongside the Robinhood agentic account and `/bora-check` |
 | 2026-08-14 | Added Rules 1a/1b: risk base, no transfers | Sizing off the agentic balance did not constrain anything, because I fund that account per trade. Anchored the cap to declared capital instead. |
 | 2026-08-14 | Rule 7 rewritten from live account facts | Confirmed cash type, T+1, equities-only, and that the other two accounts are `agentic_allowed: false`. |
+| 2026-08-14 | Rules 1c/1d/1e: sleeves, tiered drift, sizing | His platform turned out to be a live holdings dashboard, not a feed of calls. Average cost is not an entry price, so one drift rule could not serve both. Sleeves mirror his sub-portfolio structure; sizing moved to propose-and-approve with overrides on the record. |

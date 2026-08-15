@@ -100,18 +100,31 @@ def make_call(**overrides) -> dict:
         "call_date": dt.date.today().isoformat(),
         "invalidation": round(LAST * 0.85, 2),
         "thesis": "Test thesis",
+        "sleeve": "P1",
+        "source_type": "transaction",
     }
     call.update(overrides)
     return call
 
 
-def run(call=None, account=None, snapshot=None, policy=None):
+def run(call=None, account=None, snapshot=None, policy=None, budget=None):
     return verify.verify(call or make_call(), snapshot or make_snapshot(),
-                         account or make_account(), policy or verify.Policy())
+                         account or make_account(), policy or verify.Policy(),
+                         budget)
 
 
 def names(checks, severity):
     return {c.name for c in checks if c.severity == severity}
+
+
+def _raises(fn) -> bool:
+    try:
+        fn()
+    except ValueError:
+        return True
+    except Exception:
+        return False
+    return False
 
 
 # --------------------------------------------------------------------------
@@ -132,20 +145,89 @@ def test_sizing_uses_risk_base_not_account_balance():
     position cap."""
     print("Sizing anchors to risk base")
     policy = verify.Policy(risk_base=20_000.0, max_position_pct=5.0)
+    p1 = policy.sleeve("P1")
     check("max position is 5% of 20k", policy.max_position_value == 1_000.0)
 
-    small = verify.compute_sizing(100.0, make_account(buying_power=3_000.0), policy)
-    big = verify.compute_sizing(100.0, make_account(buying_power=50_000.0), policy)
-    check("budget ignores the account balance",
-          small["budget"] == big["budget"] == 1_000.0)
-    check("10 shares at 100 (floor)", small["shares"] == 10)
-    check("cost 1000", small["cost"] == 1000.0)
+    small = verify.compute_sizing(100.0, make_account(buying_power=3_000.0),
+                                  policy, p1)
+    big = verify.compute_sizing(100.0, make_account(buying_power=50_000.0),
+                                policy, p1)
+    check("ceiling ignores the account balance",
+          small["ceiling"] == big["ceiling"] == 1_000.0)
 
     # The failure this prevents: sizing off a freshly-funded balance.
     inflated = verify.compute_sizing(100.0, make_account(buying_power=20_000.0),
-                                     policy)
-    check("funding the account does not raise the cap",
-          inflated["shares"] == 10 and inflated["cost"] == 1000.0)
+                                     policy, p1)
+    check("funding the account does not raise the ceiling",
+          inflated["ceiling"] == 1_000.0)
+
+
+def test_sleeve_budgets_match_his_weights():
+    print("Sleeve budgets")
+    policy = verify.Policy(risk_base=20_000.0)
+    expected = {"P1": 14_770.0, "P4": 2_916.0, "P2": 1_242.0, "P5": 1_072.0}
+    for code, want in expected.items():
+        got = round(policy.sleeve(code).budget(20_000.0), 0)
+        check(f"{code} budget {want:,.0f}", got == want, f"got {got}")
+
+    check("unknown sleeve raises",
+          _raises(lambda: policy.sleeve("P9")))
+
+    # Ceiling is the LOWER of 5% of risk base and 25% of the sleeve.
+    check("P1 ceiling is the 5% rule (1000 < 3692)",
+          policy.position_ceiling(policy.sleeve("P1")) == 1_000.0)
+    p2_ceiling = round(policy.position_ceiling(policy.sleeve("P2")), 2)
+    check("P2 ceiling is the sleeve rule (310.50 < 1000)",
+          p2_ceiling == 310.50, f"got {p2_ceiling}")
+
+
+def test_recommendation_is_not_simply_the_maximum():
+    """A cap is a ceiling, not a target — the default proposal is an equal
+    weight within the sleeve."""
+    print("Recommended size")
+    policy = verify.Policy(risk_base=20_000.0)
+    p4 = policy.sleeve("P4")
+    sizing = verify.compute_sizing(100.0, make_account(), policy, p4)
+    # P4 budget 2916 / 3 positions = 972, ceiling = min(1000, 729) = 729
+    check("P4 ceiling 729", sizing["ceiling"] == 729.0, f"got {sizing['ceiling']}")
+    check("recommended clipped to ceiling", sizing["recommended"] == 729.0)
+
+    p2 = policy.sleeve("P2")
+    s2 = verify.compute_sizing(50.0, make_account(), policy, p2)
+    # P2 budget 1242 / 6 = 207, below the 310.50 ceiling
+    check("P2 recommends 207, below its ceiling", s2["recommended"] == 207.0,
+          f"got {s2['recommended']}")
+    check("not user_set when no budget given", s2["user_set"] is False)
+
+
+def test_budget_ceiling_and_override():
+    print("Budget ceiling / override")
+    at = run(budget=1_000.0)
+    check("budget at the ceiling passes",
+          "position_budget" in names(at.checks, "pass"),
+          f"blocks={[c.name for c in at.blocks]}")
+
+    under = run(budget=400.0)
+    check("budget under the ceiling passes",
+          "position_budget" in names(under.checks, "pass"))
+    check("uses my number, not the recommendation",
+          under.sizing["chosen"] == 400.0 and under.sizing["user_set"] is True)
+
+    over = run(budget=1_500.0)
+    check("budget over the ceiling blocks",
+          "over_cap" in names(over.checks, "block"),
+          f"blocks={[c.name for c in over.blocks]}")
+    check("verdict is DISAGREE, not WAIT", over.verdict == "DISAGREE",
+          f"got {over.verdict!r}")
+    over_check = next(c for c in over.blocks if c.name == "over_cap")
+    check("explains it is not a refusal",
+          "not a refusal" in (over_check.detail or ""))
+    check("says it will be logged as an override",
+          "override" in (over_check.detail or "").lower())
+
+    none_given = run()
+    check("no budget given -> info, awaiting approval",
+          "position_budget" in names(none_given.checks, "info"))
 
 
 def test_funding_gap_reports_transfer_amount():
@@ -181,7 +263,7 @@ def test_share_price_above_cap():
 
 
 def test_drift_blocks_stale_entry():
-    """The headline check: he called it lower, price ran, trade is different."""
+    """The headline check: he bought lower, price ran, trade is different."""
     print("Drift past his entry")
     brief = run(call=make_call(call_price=round(LAST / 1.20, 2)))  # ~+20%
     check("drift raises a block", "drift" in names(brief.checks, "block"))
@@ -191,6 +273,73 @@ def test_drift_blocks_stale_entry():
 
     small = run(call=make_call(call_price=round(LAST / 1.03, 2)))  # ~+3%
     check("3% drift does not block", "drift" not in names(small.checks, "block"))
+
+
+def test_tiered_drift_by_sleeve_and_source():
+    """The same ~15% gap is a blocker against a dated P4 trade and acceptable
+    against a P1 average cost. That distinction is the whole point of tiering."""
+    print("Tiered drift")
+    gap_price = round(LAST / 1.15, 2)  # ~+15%
+
+    p1_holdings = run(call=make_call(call_price=gap_price, sleeve="P1",
+                                     source_type="holdings"))
+    check("15% vs P1 average cost does not block (limit 20)",
+          "drift" not in names(p1_holdings.checks, "block"),
+          f"blocks={[c.name for c in p1_holdings.blocks]}")
+
+    p1_transaction = run(call=make_call(call_price=gap_price, sleeve="P1",
+                                        source_type="transaction"))
+    check("same gap blocks as a dated transaction (limit 5)",
+          "drift" in names(p1_transaction.checks, "block"))
+
+    p4_holdings = run(call=make_call(call_price=gap_price, sleeve="P4",
+                                     source_type="holdings"))
+    check("P4 holdings uses its own tight 5% limit",
+          "drift" in names(p4_holdings.checks, "block"))
+
+    check("wording says 'average cost' for holdings",
+          any("average cost" in c.message for c in p1_holdings.checks
+              if c.name == "drift"))
+    check("rejects an unknown source_type",
+          _raises(lambda: run(call=make_call(source_type="rumour"))))
+
+
+def test_p5_is_structurally_untradeable():
+    print("P5 options sleeve")
+    brief = run(call=make_call(sleeve="P5"))
+    check("P5 blocks", "sleeve_untradeable" in names(brief.checks, "block"))
+    check("verdict is DISAGREE", brief.verdict == "DISAGREE")
+    blocker = next(c for c in brief.blocks if c.name == "sleeve_untradeable")
+    check("says it is structural, not a judgement",
+          "structural" in (blocker.detail or "").lower())
+
+
+def test_sleeve_position_count_and_budget():
+    print("Sleeve limits")
+    full = [{"ticker": f"T{i}", "shares": 1, "market_value": 100.0,
+             "sector": "Technology", "sleeve": "P4"} for i in range(3)]
+    brief = run(call=make_call(sleeve="P4"),
+                account=make_account(positions=full, buying_power=5_000.0))
+    check("full P4 sleeve blocks a 4th name",
+          "sleeve_count" in names(brief.checks, "block"),
+          f"blocks={[c.name for c in brief.blocks]}")
+
+    # P2 budget is 1242; 1100 already used leaves 142 headroom.
+    heavy = [{"ticker": "X", "shares": 1, "market_value": 1_100.0,
+              "sector": "Technology", "sleeve": "P2"}]
+    over = run(call=make_call(sleeve="P2"),
+               account=make_account(positions=heavy, buying_power=5_000.0),
+               budget=300.0)
+    check("exceeding sleeve budget blocks",
+          "sleeve_budget" in names(over.checks, "block"),
+          f"blocks={[c.name for c in over.blocks]}")
+    budget_block = next(c for c in over.blocks if c.name == "sleeve_budget")
+    check("tells me not to borrow from another sleeve",
+          "another sleeve" in (budget_block.detail or ""))
+
+    clean = run(call=make_call(sleeve="P2"), budget=200.0)
+    check("empty sleeve has full headroom",
+          "sleeve_budget" in names(clean.checks, "pass"))
 
 
 def test_earnings_blackout():
@@ -252,12 +401,26 @@ def test_position_size_cap():
 
 
 def test_position_count_cap():
-    print("10 position cap")
-    positions = [{"ticker": f"S{i}", "shares": 1, "market_value": 100.0,
-                  "sector": "Energy"} for i in range(10)]
-    brief = run(account=make_account(positions=positions, buying_power=5_000.0))
-    check("full book blocks a new name",
-          "position_count" in names(brief.checks, "block"))
+    """The overall cap is derived from the sleeves (14+3+6=23), not a flat 10 —
+    a hardcoded 10 would have contradicted P1's own limit of 14."""
+    print("Overall position cap")
+    policy = verify.Policy()
+    check("total derived from tradeable sleeves",
+          policy.total_max_positions == 23,
+          f"got {policy.total_max_positions}")
+
+    ten = [{"ticker": f"S{i}", "shares": 1, "market_value": 10.0,
+            "sector": "Energy", "sleeve": "P1"} for i in range(10)]
+    ok = run(account=make_account(positions=ten, buying_power=5_000.0))
+    check("10 positions no longer blocks overall",
+          "position_count" not in names(ok.checks, "block"))
+
+    full = [{"ticker": f"S{i}", "shares": 1, "market_value": 10.0,
+             "sector": "Energy", "sleeve": "P2"} for i in range(23)]
+    brief = run(account=make_account(positions=full, buying_power=5_000.0))
+    check("23 positions blocks a new name",
+          "position_count" in names(brief.checks, "block"),
+          f"blocks={[c.name for c in brief.blocks]}")
     check("verdict is DISAGREE", brief.verdict == "DISAGREE")
 
 
@@ -413,7 +576,10 @@ def test_render_does_not_crash():
     print("Rendering")
     text = verify.render(run())
     check("renders a brief", "VERDICT" in text and "CHECKS" in text)
-    check("shows the risk base", "Risk base" in text)
+    check("shows the sleeve and ceiling",
+          "Sleeve" in text and "ceiling" in text)
+    check("asks for approval rather than asserting a size",
+          "name a different one" in text)
     check("carries the not-advice disclaimer", "not advice" in text)
 
     gapped = verify.render(run(account=make_account(buying_power=100.0)))

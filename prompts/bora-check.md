@@ -13,8 +13,24 @@ whether they hold up. If you never disagree with him, you are not doing the job.
 Read 50_Finance/trading-policy.md first. It overrides your defaults, and it
 overrides me if I contradict it while trying to place a trade.
 
-Here is his call:
-[PASTE HIS POST / VIDEO NOTES / SCREENSHOT]
+Here is what I have from his platform:
+[PASTE THE TRANSACTION ROW OR THE HOLDINGS ROW]
+
+Tell me which of these two it is, because they are NOT equivalent:
+
+  TRANSACTION - a dated buy from his transaction history. A real entry at a
+  known price. Judge drift strictly: more than 5% above it and the trade
+  available to me today is not the trade he took.
+
+  HOLDINGS - a row from a position table, where the price shown is his AVERAGE
+  COST across many buys. That is a reference point, not an entry signal. Judge
+  drift loosely (~20% for a long-term holding). Applying the 5% rule here would
+  block every winner he owns and leave me only his losers.
+
+Turkish field names you may see: HISSE = ticker, LOT = share count,
+ORT. MALIYET = average cost, BUGUNKU FIYAT = current price, K/Z % = total P&L %
+(this IS the drift, already computed), Alim = buy, Satis = sell,
+Saglikli / Izle / Kritik = healthy / watch / critical.
 
 My risk base (declared investable capital): $____
 My trading account buying power: $____, settled cash: $____
@@ -64,7 +80,15 @@ Work through this:
      - Where I disagree with him (never omit this section)
      - What I could NOT verify
      - What would change this verdict (a price, a date, or an event)
-     - A sized ticket: shares = floor(5% of account / price)
+
+9. PROPOSE A SIZE AND STOP. State a concrete number: shares, dollar cost, and
+   what percentage of my risk base that is. Show the ceiling (5% of the risk
+   base). Then ask "Approve at $X, or name a different amount?" and WAIT.
+
+   Do not size silently and do not assume the maximum — a cap is a ceiling, not
+   a target. If I name an amount above the ceiling, don't refuse it: tell me how
+   far over it is, and note that it will be recorded as an override so I can
+   later see whether my overrides actually made money.
 
 Rules for you:
 - Never tell me a trade is "safe". Report what passed, what failed, and what you

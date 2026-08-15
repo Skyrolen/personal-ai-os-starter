@@ -34,6 +34,7 @@ personal-ai-os-starter/
 │   │   ├── remind-me-at.md    ← /remind-me-at - schedule a reminder
 │   │   ├── execute-at.md      ← /execute-at - schedule a command
 │   │   ├── bora-check.md      ← /bora-check - verify a trade idea before acting
+│   │   ├── bora-portfolio.md  ← /bora-portfolio - diff their book against yours
 │   │   ├── portfolio.md       ← /portfolio - review holdings against policy
 │   │   └── trade-log.md       ← /trade-log - journal & score decisions
 │   └── claude-code-notifier.sh ← Optional notification helper
@@ -151,6 +152,7 @@ codex
 | **Remind Me At** | One-shot reminder | `/remind-me-at +20m Call Sarah` | - | - |
 | **Execute At** | Schedule a command to run later | `/execute-at 9am /daily-plan` | - | - |
 | **Bora Check** | Verify a trade idea before acting | `/bora-check NVDA` | - | Paste `prompts/bora-check.md` |
+| **Bora Portfolio** | Diff his book against yours | `/bora-portfolio` | - | Paste `prompts/bora-portfolio.md` |
 | **Portfolio** | Review holdings against policy | `/portfolio` | - | Paste `prompts/portfolio.md` |
 | **Trade Log** | Journal & score decisions | `/trade-log review` | - | Paste `prompts/trade-log.md` |
 
@@ -173,6 +175,14 @@ same bet. `/bora-check` tests for exactly those.
   account's balance. If you top the account up per trade, sizing off its balance
   means the cap moves with the trade it is meant to constrain — so a transfer
   would quietly turn "5%" into 100%.
+- **The agent proposes a size and asks.** It states a concrete number, shows the
+  ceiling, and stops. You approve it or name your own; anything above the ceiling
+  isn't refused, just flagged and logged as an override so the weekly review can
+  tell you whether your overrides actually paid.
+- **Virtual sleeves** mirror the trader's own sub-portfolio structure, each with
+  its own budget, position limit, and drift threshold — because a blended average
+  cost on a long-term hold and a dated buy are not the same signal and shouldn't
+  share one rule.
 - **Rules live in `50_Finance/trading-policy.md`** — position caps, earnings
   blackout, liquidity floor, circuit breakers — and the agent must refuse to
   break them, including when you ask it to in the moment.

@@ -61,6 +61,36 @@ from market_data import (Fundamentals, MarketDataError, MarketSnapshot,
 # --------------------------------------------------------------------------
 
 @dataclass
+class Sleeve:
+    """A virtual sub-portfolio mirroring one of Bora's sleeves.
+
+    There is only one agentic Robinhood account — sleeves are bookkeeping
+    enforced here and recorded in the trade log, not separate broker accounts.
+    """
+    code: str
+    name: str
+    weight_pct: float
+    max_positions: int = 10
+    holdings_drift_pct: float = 20.0
+    tradeable: bool = True
+    note: str = ""
+
+    def budget(self, risk_base: float) -> float:
+        return risk_base * self.weight_pct / 100.0
+
+
+def default_sleeves() -> dict[str, Sleeve]:
+    """Bora's weights as observed 2026-08-14. Overridden by risk-profile.json."""
+    return {
+        "P1": Sleeve("P1", "Yatirim", 73.85, 14, 20.0),
+        "P4": Sleeve("P4", "Trade", 14.58, 3, 5.0),
+        "P2": Sleeve("P2", "Moonshot", 6.21, 6, 15.0),
+        "P5": Sleeve("P5", "Opsiyon", 5.36, 0, 5.0, tradeable=False,
+                     note="agentic account has no option level"),
+    }
+
+
+@dataclass
 class Policy:
     # Position size is a percentage of RISK_BASE — declared investable capital —
     # not of the agentic account balance. Sizing off the balance would let a
@@ -68,18 +98,55 @@ class Policy:
     # quietly becomes 100%. The cap only constrains if its base is set
     # independently of the trade in front of you.
     risk_base: float = 20_000.0
-    max_position_pct: float = 5.0     # -> $1,000 max position
+    max_position_pct: float = 5.0     # -> $1,000 absolute ceiling
+    sleeve_position_pct: float = 25.0  # no name may exceed 25% of its sleeve
     max_positions: int = 10
     max_sector_pct: float = 30.0
     earnings_blackout_days: int = 3
-    max_drift_pct: float = 5.0        # how far past his entry is still "the trade"
+    # A dated transaction has a real entry price, so a stale one is a different
+    # trade. A holdings average cost is a blended reference point across many
+    # buys — judging it by the same 5% would block every winner he owns.
+    transaction_drift_pct: float = 5.0
     min_avg_volume: float = 500_000   # shares/day; below this, slippage bites
     max_spread_pct: float = 0.5       # bid/ask as % of mid
     require_invalidation: bool = True
+    sleeves: dict = field(default_factory=default_sleeves)
 
     @property
     def max_position_value(self) -> float:
         return self.risk_base * self.max_position_pct / 100.0
+
+    def sleeve(self, code: str) -> Sleeve:
+        try:
+            return self.sleeves[code.upper()]
+        except KeyError:
+            raise ValueError(
+                f"Unknown sleeve {code!r}. Known: {sorted(self.sleeves)}"
+            ) from None
+
+    def drift_limit(self, sleeve: Sleeve, source: str) -> float:
+        """Tiered: strict against a dated transaction, looser against an
+        average cost."""
+        if source == "transaction":
+            return self.transaction_drift_pct
+        return sleeve.holdings_drift_pct
+
+    @property
+    def total_max_positions(self) -> int:
+        """Across all sleeves. Derived so it can't silently contradict the
+        per-sleeve limits — P1 alone allows 14, which the old flat 10 forbade."""
+        total = sum(s.max_positions for s in self.sleeves.values() if s.tradeable)
+        return total or self.max_positions
+
+    def position_ceiling(self, sleeve: Sleeve) -> float:
+        """Lower of the absolute cap and a share of the sleeve.
+
+        The second term stops one name dominating a small sleeve: at P2's
+        weight the sleeve is ~$1,242, so 25% caps a moonshot near $310 rather
+        than letting it take half the sleeve.
+        """
+        return min(self.max_position_value,
+                   sleeve.budget(self.risk_base) * self.sleeve_position_pct / 100.0)
 
 
 SEVERITY_ORDER = {"block": 0, "warn": 1, "info": 2, "pass": 3}
@@ -87,6 +154,9 @@ SEVERITY_ORDER = {"block": 0, "warn": 1, "info": 2, "pass": 3}
 # Blocks that describe a fixable circumstance rather than a bad idea. These
 # yield WAIT (revisit later) instead of DISAGREE (don't take this trade).
 FIXABLE_BLOCKS = {"drift", "earnings", "invalidation", "funding"}
+
+# `over_cap` and `sleeve_untradeable` are deliberately NOT fixable: one needs an
+# explicit override on the record, the other is structurally impossible.
 
 
 @dataclass
@@ -107,6 +177,8 @@ class Brief:
     ticker: str
     verdict: str = "UNKNOWN"
     reason: str = ""
+    sleeve: str = ""
+    source_type: str = ""
     checks: list[Check] = field(default_factory=list)
     sizing: dict = field(default_factory=dict)
     technicals: dict = field(default_factory=dict)
@@ -158,10 +230,15 @@ def check_claim_completeness(call: dict, brief: Brief, policy: Policy) -> None:
                   "thesis broke or just the price moved.")
 
 
-def check_drift(call: dict, last_price: float, brief: Brief,
-                policy: Policy) -> None:
+def check_drift(call: dict, last_price: float, brief: Brief, policy: Policy,
+                limit_pct: float, source: str) -> None:
     """The highest-value check. If price has run past his entry, the trade
-    available today is not the trade he described."""
+    available today is not the trade he described.
+
+    `limit_pct` is tiered by (sleeve, source): a dated transaction gets the
+    strict limit; a holdings average cost gets the sleeve's looser one, because
+    a blended cost across many buys is a reference point, not an entry signal.
+    """
     call_price = call.get("call_price")
     if not call_price:
         brief.unverified.append("price drift (no call price given)")
@@ -171,26 +248,28 @@ def check_drift(call: dict, last_price: float, brief: Brief,
     age = _age_in_days(call.get("call_date"))
     age_text = f", call is {age} days old" if age is not None else ""
 
-    detail = (f"He called it at {call_price:.2f}; it is {last_price:.2f} now "
+    basis = ("his entry" if source == "transaction" else "his average cost")
+    detail = (f"{'He bought at' if source == 'transaction' else 'His average cost is'} "
+              f"{call_price:.2f}; it is {last_price:.2f} now "
               f"({drift:+.1f}%{age_text}).")
 
-    if drift > policy.max_drift_pct:
+    if drift > limit_pct:
         brief.add("drift", "block",
-                  f"Price has run {drift:+.1f}% past his entry "
-                  f"(limit {policy.max_drift_pct:.0f}%)",
+                  f"Price is {drift:+.1f}% above {basis} "
+                  f"(limit {limit_pct:.0f}%)",
                   detail + " Entering here is a materially worse trade than "
-                           "the one he described: less upside to target, and "
+                           "the one he took: less upside to target, and "
                            "your invalidation level is now further away.")
-    elif drift > policy.max_drift_pct / 2:
-        brief.add("drift", "warn", f"Price is {drift:+.1f}% above his entry",
+    elif drift > limit_pct / 2:
+        brief.add("drift", "warn", f"Price is {drift:+.1f}% above {basis}",
                   detail)
     elif drift < -15.0:
         brief.add("drift", "warn",
-                  f"Price is {drift:+.1f}% BELOW his entry", detail +
+                  f"Price is {drift:+.1f}% BELOW {basis}", detail +
                   " Cheaper than he paid — but check whether the thesis broke "
                   "rather than assuming it's a discount.")
     else:
-        brief.add("drift", "pass", f"Price is {drift:+.1f}% vs his entry", detail)
+        brief.add("drift", "pass", f"Price is {drift:+.1f}% vs {basis}", detail)
 
     if age is not None and age > 90:
         brief.add("staleness", "warn",
@@ -452,28 +531,30 @@ def check_policy(call: dict, account: dict, fund: Fundamentals, sizing: dict,
     held = next((p for p in positions
                  if str(p.get("ticker", "")).upper() == ticker), None)
 
-    if len(positions) >= policy.max_positions and not held:
+    total_max = policy.total_max_positions
+    if len(positions) >= total_max and not held:
         brief.add("position_count", "block",
                   f"Already holding {len(positions)} positions "
-                  f"(max {policy.max_positions})",
+                  f"(max {total_max} across all sleeves)",
                   "Close something before opening a new name.")
     else:
         brief.add("position_count", "pass",
-                  f"{len(positions)} of {policy.max_positions} positions used")
+                  f"{len(positions)} of {total_max} positions used overall")
 
-    # Existing exposure counts against the same cap, measured against the risk
-    # base rather than the account balance so it stays comparable.
+    # Existing exposure counts against the same ceiling, measured against the
+    # risk base rather than the account balance so it stays comparable.
     if held:
         existing = float(held.get("market_value", 0.0))
         combined = existing + sizing.get("cost", 0.0)
-        if combined > policy.max_position_value:
+        ceiling = sizing.get("ceiling", policy.max_position_value)
+        if combined > ceiling:
             brief.add("position_size", "block",
                       f"Already {existing:,.2f} in {ticker}; adding would reach "
-                      f"{combined:,.2f} (max {policy.max_position_value:,.2f})")
+                      f"{combined:,.2f} (ceiling {ceiling:,.2f})")
         else:
             brief.add("position_size", "pass",
                       f"Existing {existing:,.2f} + new = {combined:,.2f} "
-                      f"(max {policy.max_position_value:,.2f})")
+                      f"(ceiling {ceiling:,.2f})")
 
     # Sector concentration. Correlated names are one bet wearing many names.
     sector = fund.sector
@@ -498,32 +579,51 @@ def check_policy(call: dict, account: dict, fund: Fundamentals, sizing: dict,
         brief.unverified.append("sector concentration (sector unknown)")
 
 
-def compute_sizing(last_price: float, account: dict, policy: Policy) -> dict:
-    """Position size from the policy cap, not from conviction.
+def compute_sizing(last_price: float, account: dict, policy: Policy,
+                   sleeve: Sleeve, budget: float | None = None) -> dict:
+    """Recommend a size, and price whatever budget the user named.
 
-    Sized against `policy.risk_base` — declared investable capital — so the cap
-    does not move when cash is shuffled between accounts. The agentic balance
-    then only determines whether the trade is *fundable right now*, which is a
-    separate question answered by check_funding.
+    The agent never sizes silently. It proposes `recommended` — an equal weight
+    within the sleeve, capped by `ceiling` — shows the ceiling, and asks. If the
+    user names a budget it is used as-is; anything above the ceiling is caught
+    by check_position_budget rather than being quietly clipped, so an override
+    is a decision on the record instead of an invisible adjustment.
     """
-    budget = policy.max_position_value
-    shares = int(math.floor(budget / last_price)) if last_price > 0 else 0
+    sleeve_budget = sleeve.budget(policy.risk_base)
+    ceiling = policy.position_ceiling(sleeve)
+
+    # Equal weight within the sleeve is the neutral prior: a cap is a ceiling,
+    # not a target, so the default proposal is not simply "the maximum".
+    even = (sleeve_budget / sleeve.max_positions) if sleeve.max_positions else 0.0
+    recommended = round(min(even, ceiling), 2) if even else round(ceiling, 2)
+
+    chosen = float(budget) if budget else recommended
+    shares = int(math.floor(chosen / last_price)) if last_price > 0 else 0
     cost = round(shares * last_price, 2)
 
     sizing = {
         "risk_base": policy.risk_base,
-        "target_pct": policy.max_position_pct,
-        "budget": round(budget, 2),
+        "sleeve": sleeve.code,
+        "sleeve_name": sleeve.name,
+        "sleeve_budget": round(sleeve_budget, 2),
+        "ceiling": round(ceiling, 2),
+        "recommended": recommended,
+        "chosen": round(chosen, 2),
+        "user_set": bool(budget),
         "price": round(last_price, 2),
         "shares": shares,
         "cost": cost,
+        "pct_of_risk_base": round(cost / policy.risk_base * 100.0, 2)
+        if policy.risk_base else None,
+        "pct_of_sleeve": round(cost / sleeve_budget * 100.0, 2)
+        if sleeve_budget else None,
     }
 
     if shares == 0:
         sizing["note"] = (
-            f"One share costs {last_price:,.2f}, above the "
-            f"{budget:,.2f} position cap. Either skip this name or take it as "
-            f"a fractional order (market orders, regular hours only)."
+            f"One share costs {last_price:,.2f}, above the {chosen:,.2f} "
+            f"budget for this position. Either skip this name or take it as a "
+            f"fractional order (market orders, regular hours only)."
         )
 
     buying_power = (account or {}).get("buying_power")
@@ -532,6 +632,80 @@ def compute_sizing(last_price: float, account: dict, policy: Policy) -> dict:
         sizing["funding_gap"] = round(max(0.0, cost - float(buying_power)), 2)
 
     return sizing
+
+
+def check_position_budget(sizing: dict, policy: Policy, sleeve: Sleeve,
+                          brief: Brief) -> None:
+    """The size gate. Under the ceiling passes without comment; over it is not
+    refused, but it must be an explicit, logged override."""
+    chosen = sizing.get("chosen", 0.0)
+    ceiling = sizing.get("ceiling", 0.0)
+
+    if chosen > ceiling + 0.005:
+        over = chosen - ceiling
+        brief.add("over_cap", "block",
+                  f"Budget {chosen:,.2f} exceeds the {ceiling:,.2f} ceiling "
+                  f"for {sleeve.code} by {over:,.2f}",
+                  f"The ceiling is the lower of {policy.max_position_pct:.0f}% "
+                  f"of the risk base ({policy.max_position_value:,.2f}) and "
+                  f"{policy.sleeve_position_pct:.0f}% of the {sleeve.code} "
+                  f"sleeve ({sleeve.budget(policy.risk_base) * policy.sleeve_position_pct / 100.0:,.2f}). "
+                  "This is not a refusal: say plainly that you are overriding "
+                  "the cap and it will be logged as an override, so the "
+                  "scorecard can tell you later whether overriding paid.")
+    elif sizing.get("user_set"):
+        brief.add("position_budget", "pass",
+                  f"Budget {chosen:,.2f} is within the {ceiling:,.2f} ceiling")
+    else:
+        brief.add("position_budget", "info",
+                  f"Proposed {chosen:,.2f} (ceiling {ceiling:,.2f}) — "
+                  "awaiting your approval or a different amount")
+
+
+def check_sleeve(sleeve: Sleeve, account: dict, sizing: dict, policy: Policy,
+                 brief: Brief) -> None:
+    """Sleeve-level limits: tradability, position count, and budget headroom."""
+    if not sleeve.tradeable:
+        reason = f" ({sleeve.note})" if sleeve.note else ""
+        brief.add("sleeve_untradeable", "block",
+                  f"{sleeve.code} {sleeve.name} cannot be traded in this "
+                  f"account{reason}",
+                  "Its share of the risk base is held as cash. This is a "
+                  "structural limit, not a judgement about the idea.")
+        return
+
+    if not account:
+        brief.unverified.append(f"{sleeve.code} sleeve usage (no account data)")
+        return
+
+    positions = [p for p in (account.get("positions") or [])
+                 if str(p.get("sleeve", "")).upper() == sleeve.code]
+
+    if len(positions) >= sleeve.max_positions:
+        brief.add("sleeve_count", "block",
+                  f"{sleeve.code} already holds {len(positions)} positions "
+                  f"(max {sleeve.max_positions})")
+    else:
+        brief.add("sleeve_count", "pass",
+                  f"{sleeve.code}: {len(positions)} of {sleeve.max_positions} "
+                  f"positions used")
+
+    used = sum(float(p.get("market_value", 0.0)) for p in positions)
+    sleeve_budget = sizing.get("sleeve_budget", 0.0)
+    remaining = sleeve_budget - used
+    cost = sizing.get("cost", 0.0)
+
+    if cost > remaining:
+        brief.add("sleeve_budget", "block",
+                  f"{sleeve.code} has {remaining:,.2f} of {sleeve_budget:,.2f} "
+                  f"left; this position needs {cost:,.2f}",
+                  "Trim an existing position in this sleeve, or take a smaller "
+                  "size. Do not borrow budget from another sleeve — that is "
+                  "how the structure stops meaning anything.")
+    else:
+        brief.add("sleeve_budget", "pass",
+                  f"{sleeve.code} headroom {remaining:,.2f} of "
+                  f"{sleeve_budget:,.2f}")
 
 
 # --------------------------------------------------------------------------
@@ -587,7 +761,7 @@ def decide(brief: Brief) -> None:
 # --------------------------------------------------------------------------
 
 def verify(call: dict, snapshot: MarketSnapshot, account: dict | None = None,
-           policy: Policy | None = None) -> Brief:
+           policy: Policy | None = None, budget: float | None = None) -> Brief:
     policy = policy or Policy()
     account = account or {}
 
@@ -599,20 +773,32 @@ def verify(call: dict, snapshot: MarketSnapshot, account: dict | None = None,
             f"call is for {ticker} but market data is for {snapshot.ticker}"
         )
 
+    sleeve = policy.sleeve(call.get("sleeve") or "P1")
+    source = (call.get("source_type") or "holdings").lower()
+    if source not in ("transaction", "holdings"):
+        raise ValueError(
+            f"source_type must be 'transaction' or 'holdings', got {source!r}"
+        )
+
     brief = Brief(ticker=ticker)
+    brief.sleeve = sleeve.code
+    brief.source_type = source
     check_claim_completeness(call, brief, policy)
 
     read = indicators.analyze(snapshot.bars, ticker)
     last_price = snapshot.last_price
     fund = snapshot.fundamentals
-    sizing = compute_sizing(last_price, account, policy)
+    sizing = compute_sizing(last_price, account, policy, sleeve, budget)
     brief.sizing = sizing
 
-    check_drift(call, last_price, brief, policy)
+    check_drift(call, last_price, brief, policy,
+                policy.drift_limit(sleeve, source), source)
     check_levels_coherent(call, last_price, brief)
     check_technicals(read, call, brief)
     check_fundamentals(fund, brief, policy)
     check_tradability(snapshot.tradability, snapshot.quote, fund, brief, policy)
+    check_position_budget(sizing, policy, sleeve, brief)
+    check_sleeve(sleeve, account, sizing, policy, brief)
     check_funding(account, sizing, brief)
     check_policy(call, account, fund, sizing, brief, policy)
 
@@ -630,7 +816,10 @@ def render(brief: Brief) -> str:
     add = lines.append
 
     add("=" * 68)
-    add(f"  {brief.ticker} — VERDICT: {brief.verdict}")
+    header = f"  {brief.ticker} — VERDICT: {brief.verdict}"
+    if brief.sleeve:
+        header += f"   [{brief.sleeve} / {brief.source_type}]"
+    add(header)
     add("=" * 68)
     add("")
     add(_wrap(brief.reason))
@@ -660,19 +849,29 @@ def render(brief: Brief) -> str:
         add("")
 
     sizing = brief.sizing
-    add("SIZING (policy cap, not conviction)")
+    add("SIZING — proposal, not a decision")
     add("-" * 68)
-    add(f"  Risk base {sizing.get('risk_base', 0):,.0f} × "
-        f"{sizing.get('target_pct', 0):.0f}% = "
-        f"{sizing.get('budget', 0):,.2f} max position")
+    add(f"  Sleeve {sizing.get('sleeve')} {sizing.get('sleeve_name', '')}   "
+        f"budget {sizing.get('sleeve_budget', 0):,.2f}   "
+        f"ceiling {sizing.get('ceiling', 0):,.2f}")
+    if sizing.get("user_set"):
+        add(f"  You set: {sizing.get('chosen', 0):,.2f} "
+            f"(recommended was {sizing.get('recommended', 0):,.2f})")
+    else:
+        add(f"  Recommended: {sizing.get('recommended', 0):,.2f}")
     if sizing.get("shares"):
         add(f"  {sizing['shares']} shares @ {sizing['price']:,.2f} = "
-            f"{sizing['cost']:,.2f}")
+            f"{sizing['cost']:,.2f}   "
+            f"({sizing.get('pct_of_sleeve')}% of sleeve, "
+            f"{sizing.get('pct_of_risk_base')}% of risk base)")
     if sizing.get("note"):
         add(_wrap(sizing["note"], indent="  "))
     if sizing.get("funding_gap"):
         add(f"  TRANSFER NEEDED: {sizing['funding_gap']:,.2f} "
             f"(have {sizing.get('buying_power', 0):,.2f})")
+    add("")
+    add("  >> Approve at this amount, or name a different one. Nothing is")
+    add("     placed until you approve the exact ticket.")
     add("")
 
     if brief.unverified:
@@ -711,23 +910,40 @@ def _age_in_days(call_date) -> int | None:
 RISK_PROFILE_PATH = "50_Finance/private/risk-profile.json"
 
 
-def _load_risk_base() -> float | None:
-    """Read the declared risk base from the gitignored private profile.
+def _load_risk_profile() -> dict:
+    """Read the gitignored private profile: risk base and sleeve weights.
 
     Lives outside the committed policy because it reveals portfolio size. If it
-    is absent the Policy default applies — and the brief still shows which base
-    it sized against, so a wrong number is visible rather than silent.
+    is absent the Policy defaults apply — and the brief still shows which base
+    and sleeve it sized against, so a wrong number is visible rather than silent.
     """
     import os
     for candidate in (RISK_PROFILE_PATH,
                       os.path.join("..", RISK_PROFILE_PATH)):
         try:
             with open(candidate, encoding="utf-8") as handle:
-                value = json.load(handle).get("risk_base")
-                return float(value) if value else None
-        except (FileNotFoundError, json.JSONDecodeError, TypeError, ValueError):
+                return json.load(handle)
+        except (FileNotFoundError, json.JSONDecodeError):
             continue
-    return None
+    return {}
+
+
+def _sleeves_from_profile(profile: dict) -> dict | None:
+    raw = profile.get("sleeves")
+    if not raw:
+        return None
+    sleeves = {}
+    for code, spec in raw.items():
+        sleeves[code.upper()] = Sleeve(
+            code=code.upper(),
+            name=spec.get("name", code),
+            weight_pct=float(spec.get("weight_pct", 0.0)),
+            max_positions=int(spec.get("max_positions", 10)),
+            holdings_drift_pct=float(spec.get("holdings_drift_pct", 20.0)),
+            tradeable=bool(spec.get("tradeable", True)),
+            note=spec.get("note", ""),
+        )
+    return sleeves
 
 
 def _load(path: str | None) -> dict:
@@ -753,6 +969,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--thesis", default="")
     parser.add_argument("--risk-base", type=float,
                         help="Override declared investable capital")
+    parser.add_argument("--sleeve", default=None,
+                        help="Which virtual sleeve: P1, P2, P4, P5")
+    parser.add_argument("--source-type", default=None,
+                        choices=["transaction", "holdings"],
+                        help="'transaction' = a dated buy from his history "
+                             "(strict drift); 'holdings' = his average cost "
+                             "(sleeve's looser drift limit)")
+    parser.add_argument("--budget", type=float,
+                        help="Position budget you are approving. Omit to see "
+                             "the recommendation and the ceiling first.")
     parser.add_argument("--json", action="store_true",
                         help="Emit JSON instead of the text brief")
     parser.add_argument("--allow-missing-invalidation", action="store_true",
@@ -764,20 +990,26 @@ def main(argv: list[str] | None = None) -> int:
     for key, value in (("ticker", args.ticker), ("call_price", args.call_price),
                        ("call_date", args.call_date), ("target", args.target),
                        ("invalidation", args.invalidation),
-                       ("thesis", args.thesis), ("direction", args.direction)):
+                       ("thesis", args.thesis), ("direction", args.direction),
+                       ("sleeve", args.sleeve),
+                       ("source_type", args.source_type)):
         if value:
             call[key] = value
 
+    profile = _load_risk_profile()
     policy = Policy(require_invalidation=not args.allow_missing_invalidation)
-    risk_base = args.risk_base or _load_risk_base()
+    risk_base = args.risk_base or profile.get("risk_base")
     if risk_base:
-        policy.risk_base = risk_base
+        policy.risk_base = float(risk_base)
+    sleeves = _sleeves_from_profile(profile)
+    if sleeves:
+        policy.sleeves = sleeves
 
     try:
         snapshot = load_market_json(args.market)
         if not call.get("ticker"):
             call["ticker"] = snapshot.ticker
-        brief = verify(call, snapshot, _load(args.account), policy)
+        brief = verify(call, snapshot, _load(args.account), policy, args.budget)
     except MarketDataError as exc:
         print(f"Market data error: {exc}", file=sys.stderr)
         return 2

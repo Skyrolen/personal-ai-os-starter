@@ -1,34 +1,69 @@
 # Bora Check
 
-Take a trade idea from Bora Özkent, verify it independently, and — only if it
-survives — produce a sized order ticket for approval.
+Take a position or trade from Bora Özkent's platform, verify it independently,
+and — only if it survives — propose a sized ticket for my approval.
 
-**The job is not to execute his call. It is to find out whether it holds up.**
-A run of AGREEs with no DISAGREEs means this command is broken.
+**The job is not to copy him. It is to find out whether the trade is still
+available to me at a price that makes sense.** A run of AGREEs with no
+DISAGREEs means this command is broken.
 
 ## Instructions
 
 ### 0. Read the rules first
 
-Read `50_Finance/trading-policy.md` before anything else. It overrides your
-defaults and it overrides me if I contradict it mid-conversation. Note Rule 0:
-**you may never call `place_equity_order` without my explicit approval of that
-exact ticket.**
+Read `50_Finance/trading-policy.md` and `50_Finance/private/risk-profile.json`.
+The policy overrides your defaults and it overrides me if I contradict it
+mid-conversation. Note Rule 0: **you may never call `place_equity_order` without
+my explicit approval of that exact ticket.**
 
-### 1. Get the call
+### 1. Get the input — two modes, and they are not equivalent
 
-Input is `$ARGUMENTS`, which may be a ticker, a pasted post, or nothing.
+Input is `$ARGUMENTS`: a ticker, a pasted row, or nothing.
 
-- **Pasted text or screenshot** — use it directly.
-- **Nothing, or just a ticker** — pull from his site using the Chrome DevTools
-  MCP against my dedicated debug profile (already logged into Skool and
-  boraozkent.net). Navigate, read the relevant post or portfolio page, extract.
-- **Can't reach it** — say so and ask me to paste. Do not guess at what he said.
+His platform is `https://portfolio-platform-production-7518.up.railway.app/`.
+Read it through the Chrome DevTools MCP against my logged-in debug profile.
 
-His content is subscriber-only. Read it for my decisions; never republish it,
-and keep the extracted text in `50_Finance/private/` (gitignored).
+**Mode A — `transaction`** (preferred). From **`İşlem Geçmişi`** (transaction
+history) or **`Son İşlemler`** (recent transactions). A new **Alım** (buy) is a
+real dated entry at a known price. This is the closest thing to a call he
+publishes, and it gets the strict 5% drift limit.
 
-### 2. Extract the claim — without embellishing it
+**Mode B — `holdings`.** From a sub-portfolio position table. What you get is
+**`ORT. MALİYET`** — a blended average cost across however many buys, not an
+entry signal. It gets the sleeve's looser drift limit, because judging a
+long-term average by a 5% rule would block every winner he owns.
+
+Say which mode you used. If you can't reach the page, say so and ask me to
+paste — never guess at what he holds.
+
+His content is subscriber-only. Read it for my decisions, keep extracts in
+`50_Finance/private/` (gitignored), never republish it.
+
+### 2. Turkish field map — use this, don't improvise
+
+| Turkish | Meaning |
+|---|---|
+| HİSSE | ticker |
+| TREND | his Porttech health tag + 0–100 score |
+| Sağlıklı / İzle / Kritik / Veri yok | healthy / watch / critical / no data |
+| uyarı | warning |
+| LOT | share count |
+| ORT. MALİYET | average cost |
+| BUGÜNKÜ FİYAT | current price |
+| POZ. DEĞERİ | position value |
+| K/Z % | total P&L % — **this is the drift already computed** |
+| GÜNLÜK K/Z $ / GÜNLÜK % | daily P&L $ / % |
+| Alım / Satış | buy / sell |
+| Nakit / Pozisyon / Toplam | cash / position / total |
+| Gerçekleşen K/Z | realized P&L |
+| ALT PORTFÖY DAĞILIMI | sub-portfolio allocation |
+| RAPOR TARİHİ / Başlangıç | report date / starting capital |
+
+Sleeves: **P1 Yatırım** (core long-term) · **P2 Moonshot** (speculative) ·
+**P3 Savunma** (defensive) · **P4 Trade** (short-term) · **P5 Opsiyon** (options,
+which I cannot trade — my agentic account has no options level).
+
+### 3. Extract the claim — without embellishing it
 
 Write `50_Finance/private/bora/calls/YYYY-MM-DD-TICKER.json`:
 
@@ -36,66 +71,52 @@ Write `50_Finance/private/bora/calls/YYYY-MM-DD-TICKER.json`:
 {
   "ticker": "NVDA",
   "direction": "buy",
-  "call_price": 120.00,
-  "call_date": "2026-07-01",
-  "target": 160.00,
-  "invalidation": 104.00,
-  "thesis": "his reasoning, in his words",
-  "source": "Skool post 2026-07-01"
+  "sleeve": "P1",
+  "source_type": "transaction",
+  "call_price": 217.62,
+  "call_date": "2026-05-01",
+  "target": null,
+  "invalidation": null,
+  "thesis": "his reasoning, in his words, if any is given",
+  "porttech": "71 Sağlıklı (1 uyarı)",
+  "source": "İşlem Geçmişi row, read 2026-08-14"
 }
 ```
 
-Rules for this step:
-- **Omit what he didn't say.** No target means no `target` field. Do not infer a
-  stop from a chart and record it as his.
-- Quote his thesis rather than paraphrasing it into something crisper than he
-  said. If the reasoning is vague, the vagueness is data.
-- If he gave a price *range*, use the midpoint and note the range in `thesis`.
+- `call_price` is the **transaction price** in Mode A, the **ORT. MALİYET** in Mode B.
+- **Omit what he didn't say.** The dashboard gives no targets and no stops. Do
+  not invent them and do not attribute them to him. If there's no invalidation
+  level, that's my job to set — say so.
+- Record his Porttech tag verbatim. If he flags his own position **Kritik** or
+  **İzle**, that is evidence and it belongs in the brief.
 
-### 3. Pull account state from Robinhood
+### 4. Pull account state from Robinhood
 
-Read `50_Finance/private/risk-profile.json` for the agentic account number and
-risk base. **Always pass that account number explicitly** — never default to
-whatever `get_accounts` returns first. My main margin account and Roth IRA are
-`agentic_allowed: false` and must never be read from or proposed against.
+Use the agentic account number from `risk-profile.json`. **Always pass it
+explicitly** — never default to whatever `get_accounts` returns first. My main
+margin account and Roth IRA are `agentic_allowed: false`.
 
-Then `get_portfolio` and `get_equity_positions` on that account, plus
-`get_accounts` for `unsettled_funds`. Write `50_Finance/private/account.json`:
+`get_portfolio`, `get_equity_positions`, plus `get_accounts` for
+`unsettled_funds`. Write `50_Finance/private/account.json`. Tag each holding
+with the sleeve it belongs to from the trade log — the sleeve checks are
+meaningless without it.
 
-```json
-{
-  "account_value": 3000.0,
-  "buying_power": 3000.0,
-  "settled_cash": 3000.0,
-  "positions": [{"ticker": "AAPL", "shares": 10, "market_value": 2000.0, "sector": "Technology"}]
-}
-```
-
-`settled_cash` = buying power minus `unsettled_funds`. If a holding has no
-sector, look it up — the concentration check is worthless without it, and
-Bora's book is correlated enough that concentration is the risk most likely to
-actually hurt me.
-
-### 4. Assemble market data from Robinhood
-
-All market data comes from Robinhood — the same venue we execute on, which
-makes its tradability and liquidity data authoritative. Call:
+### 5. Assemble market data from Robinhood
 
 | Tool | For |
 |---|---|
-| `get_equity_historicals` | daily OHLCV, ~300 sessions (`interval: "day"`, `start_time` ~15 months back) |
+| `get_equity_historicals` | daily OHLCV, ~300 sessions (`interval: "day"`) |
 | `get_equity_quotes` | live last / bid / ask |
 | `get_equity_fundamentals` | market cap, PE, average volume, 52-week range |
 | `get_financials` | revenue trend → `revenue_growth` |
 | `get_earnings_results` | next earnings date |
-| `get_equity_tradability` | tradable + fractional flags for **this** account |
+| `get_equity_tradability` | tradable + fractional flags for this account |
 
-Write `50_Finance/private/market.json` in the shape documented at the top of
-`tools/market_data.py`. Drop nothing and invent nothing: a field you couldn't
-fetch must be **absent**, so the brief reports it as unverified rather than
-treating it as fine.
+Write `50_Finance/private/market.json` (shape documented in
+`tools/market_data.py`). A field you couldn't fetch must be **absent**, so the
+brief reports it unverified rather than treating it as fine.
 
-### 5. Run the verification
+### 6. Run the verification — no budget yet
 
 ```bash
 .venv/bin/python tools/verify.py \
@@ -104,86 +125,99 @@ treating it as fine.
   --account 50_Finance/private/account.json
 ```
 
-This checks drift from his entry, level coherence, risk/reward, trend, RSI,
-MACD, ATR, support/resistance, earnings blackout, revenue growth, tradability,
-bid/ask spread, liquidity, the funding gap, T+1 settlement, the position cap,
-the 10-position cap, and sector concentration.
+Omit `--budget` on this first pass so the brief shows the **recommendation and
+the ceiling** rather than assuming a size.
 
-**On a funding block:** report the exact transfer amount and stop. Do not size
-the position down to fit the available cash — that caps winners while leaving
-losers full-size. I move the money; you never do.
+### 7. Add what the script cannot check
 
-### 6. Add what the script cannot check
+- **News** — has anything broken the thesis since his entry?
+- **His own signal** — is his Porttech tag Kritik/İzle? Is he *selling* this
+  name? Check `Son İşlemler`: a recent **Satış** in a name you're about to buy
+  is the single most important thing on the page.
+- **Scale** — his position may be 10%+ of a $2.4M book. Yours is capped near
+  $1,000. Never present his conviction as transferable to your size.
 
-The script does arithmetic. You do judgement. Add:
+### 8. Present the brief
 
-- **News check** — has anything happened since his call that breaks the thesis?
-  A downgrade, a guidance cut, a lawsuit, a change of CEO.
-- **Thesis coherence** — does his stated reason actually imply this trade? A
-  long-term AI-demand argument does not justify an entry timed to a chart
-  pattern.
-- **His own consistency** — does this contradict something he said recently?
+## `TICKER` — VERDICT `[sleeve / mode]`
 
-### 7. Present the brief
-
-Show the script's output, then your own read in this format:
-
-## `TICKER` — VERDICT
-
-**What he said:** [one line, his claim and his level]
+**What he did:** [bought N at $X on date] *or* [holds N lots, avg cost $X, K/Z +N%]
+**His own tag:** [Porttech score and label]
 **What the data says:** [one line]
 **Verdict:** AGREE / AGREE (with caveats) / WAIT / DISAGREE
 
 **Where I agree with him:** [specifics]
-**Where I disagree with him:** [specifics — never omit this section; if there
-is genuinely nothing, say "nothing material" rather than deleting the heading]
-**What I could not verify:** [list, explicitly]
+**Where I disagree with him:** [specifics — never omit this heading; if there's
+genuinely nothing, write "nothing material"]
+**What I could not verify:** [list]
 **What would change this verdict:** [a price, a date, or an event]
 
-### Proposed ticket
-[ticker, side, share count, cost, % of account, invalidation level]
-*or* "No ticket — verdict is WAIT/DISAGREE."
+You may **downgrade** the script's verdict on judgement. You may never
+**upgrade** one: a hard block is not an AGREE.
 
-You may **downgrade** the script's verdict on qualitative grounds. You may never
-**upgrade** one: if the script found a hard block, the answer is not AGREE.
+### 9. Propose an amount and STOP
 
-### 8. Review, then stop
+State it concretely:
 
-If the verdict is AGREE, call `review_equity_order` and show me the pre-trade
-warnings verbatim.
+> Recommended **$X** (N shares @ $P) — that's N% of the {sleeve} sleeve and N%
+> of the risk base. Ceiling for this sleeve is **$C**; {sleeve} has **$H** of
+> **$B** headroom left.
+>
+> **Approve at $X, or name a different amount?**
 
-**Then stop.** Do not place it. Ask: *"Approve this exact ticket?"* and wait.
+Then **stop and wait.** Do not proceed to a review or an order.
 
+When I answer, re-run with `--budget`:
+
+```bash
+.venv/bin/python tools/verify.py --call ... --market ... --account ... --budget 800
+```
+
+- **At or below the ceiling:** accept it without argument.
+- **Above the ceiling:** it blocks as `over_cap`. This is *not* a refusal —
+  quote the rule, tell me the amount over, and ask me to state plainly that I'm
+  overriding. Then log it as an override.
+
+### 10. Review, then stop again
+
+Call `review_equity_order` and show me the pre-trade warnings verbatim.
+
+**Then stop.** Ask: *"Approve this exact ticket?"* and wait.
+
+Approving a **size** is not approving the **order** — two separate gates.
 Nothing in my earlier messages counts as approval of a ticket that did not exist
 when I wrote them.
 
-### 9. Log it either way
+### 11. Log it either way
 
-Append to `50_Finance/private/trade-log.md` — including DISAGREEs and WAITs.
-A log of only the trades I took cannot tell me whether my vetoes were any good.
+Append to `50_Finance/private/trade-log.md` — including DISAGREEs, WAITs, and
+overrides. A log of only the trades I took cannot tell me whether my vetoes were
+any good.
 
 ```
-## YYYY-MM-DD — TICKER — VERDICT
-- **His call:** entry, target, date
-- **Price at check:** X (drift +N% from his entry)
+## YYYY-MM-DD — TICKER — VERDICT [sleeve / mode]
+- **His action:** bought N @ $X on date / holds N lots @ avg $X (K/Z +N%)
+- **His Porttech tag:** ...
+- **Price at check:** X (drift +N% vs his entry/average)
 - **Verdict:** ... because ...
 - **Disagreements:** ...
 - **Could not verify:** ...
+- **Recommended / approved:** $X / $Y   (override: yes/no)
 - **Action:** placed N shares @ X / declined / waiting for $X
+- **Invalidation:** X
 - **Reasoning at the time:** [written now, never revised later]
 ```
 
 ## Notes
 
-- Never soften a disagreement because he is the expert and I am paying for his
-  calls. The subscription is the reason to check him, not a reason to defer.
-- Never tell me a trade is "safe". Report what passed, what failed, and what you
+- Never soften a disagreement because he is the expert and I pay for his calls.
+  The subscription is the reason to check him, not a reason to defer.
+- Never tell me a trade is "safe". Report what passed, what failed, what you
   could not see.
-- If I push to skip a check or override a block, quote the relevant rule from
-  `trading-policy.md` and make me say plainly that I am overriding it. Then log
-  that I did.
+- If I push to skip a check, quote the rule and make me say plainly that I'm
+  overriding it. Then log that I did.
 
 ## When to Use
 
-Whenever Bora posts a new call, or before acting on anything of his.
-Type: `/bora-check NVDA` or `/bora-check [paste his post]`
+When he posts a new transaction, or before acting on anything of his.
+Type: `/bora-check NVDA` or `/bora-check [paste the row]`
