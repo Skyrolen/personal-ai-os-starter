@@ -30,6 +30,12 @@ it to look smarter destroys the only honest record I have.
 Record declines and waits too. Otherwise the scorecard can only measure the
 trades I took, which is the half of the data that flatters me.
 
+For declines, add a **decline reason** from this list (or a new one, named
+plainly): `drift` / `his-own-warning` / `he-is-selling` / `unmanageable-size` /
+`earnings` / `concentration` / `funding` / `conviction`. The weekly review
+scores declines *by reason* — "my drift vetoes are working, my conviction
+vetoes are costing me" is exactly the kind of thing only a tagged log can show.
+
 ### Mode: review — `/trade-log review`
 
 Run weekly.

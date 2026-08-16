@@ -165,6 +165,7 @@ Add to `.claude/settings.json` so the tools run without a prompt each time:
 | `/bora-scan` | Crawl his platform + Skool into `50_Finance/private/bora/` |
 | `/bora-portfolio` | Diff his book against yours, sleeve by sleeve |
 | `/bora-check [ticker or pasted row]` | Verify one position, propose a size, stop for approval |
+| `/bora-backtest` | Score his transaction ledger vs SPY/QQQ; trim quality; tag predictiveness |
 | `/portfolio` | Read-only review of your holdings against policy |
 | `/trade-log log` | Journal a decision |
 | `/trade-log review` | Weekly scoring, including his hit rate and your overrides |
@@ -193,9 +194,14 @@ data alone cannot show you.
 
 ## What this does not do
 
-- **No backtesting of his historical record.** That needs his timestamped call
-  history, which isn't available. The scorecard builds that record going
-  forward instead — expect it to mean nothing for the first ~20 calls.
+- **The backtest scores his *realised trading only*** — closed round-trips from
+  the platform's transaction ledger, FIFO-matched, benchmarked against SPY/QQQ
+  over identical windows. It does not score his newsletter picks, his options
+  sleeve, or positions opened before the ledger begins; buckets with small n
+  carry their n and prove nothing. (An earlier version of this document said
+  backtesting was impossible for lack of timestamped history — the platform's
+  transaction ledger *is* that history, so that claim was wrong and `/bora-backtest`
+  supersedes it.)
 - **No transfers.** The agent reports the exact amount to move between accounts;
   you move it. It has no transfer tools and must never be given any.
 - **No options or crypto** in the agentic account — its `option_level` is empty.

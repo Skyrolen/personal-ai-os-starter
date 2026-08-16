@@ -533,6 +533,77 @@ def test_ticker_mismatch_is_rejected():
         check("raises on mismatched ticker", "OTHER" in str(exc))
 
 
+def test_his_direction_warning():
+    """The MU lesson: his last action being a sell must lead the brief, not
+    hide in the transaction log."""
+    print("His direction")
+    recent_sell = make_call(his_last_action={
+        "action": "Satış", "date": dt.date.today().isoformat(),
+        "price": 850.0, "note": "rebalancing weight"})
+    brief = run(call=recent_sell)
+    check("recent sell warns", "his_direction" in names(brief.checks, "warn"),
+          f"warns={names(brief.checks,'warn')}")
+    warning = next(c for c in brief.checks if c.name == "his_direction")
+    check("quotes his stated reason", "rebalancing weight" in (warning.detail or ""))
+
+    old_sell = make_call(his_last_action={
+        "action": "sell",
+        "date": (dt.date.today() - dt.timedelta(days=120)).isoformat()})
+    stale = run(call=old_sell)
+    check("120-day-old sell is info, not warn",
+          "his_direction" in names(stale.checks, "info"))
+
+    buy = run(call=make_call(his_last_action={
+        "action": "Alım", "date": dt.date.today().isoformat()}))
+    check("recent buy passes", "his_direction" in names(buy.checks, "pass"))
+
+    missing = run()
+    check("absent -> listed as unverified, not assumed fine",
+          any("last action" in u for u in missing.unverified))
+
+
+def test_manageability_warning():
+    """The MU lesson generalised: a ceiling that buys <3 whole shares leaves
+    only all-or-nothing position management."""
+    print("Manageability")
+    pricey = make_bars(count=300, start=900.0, drift=0.05, noise=1.0, seed=3)
+    last = float(pricey["close"].iloc[-1])
+    call = make_call(call_price=round(last, 2),
+                     invalidation=round(last * 0.85, 2))
+
+    frac = make_snapshot(bars=pricey,
+                         tradability=verify.Tradability(tradable=True,
+                                                        fractional=True))
+    brief = verify.verify(call, frac, make_account(buying_power=5_000.0),
+                          verify.Policy(), None)
+    check("1-share ceiling warns", "manageability" in names(brief.checks, "warn"),
+          f"warns={names(brief.checks,'warn')}")
+    warning = next(c for c in brief.checks if c.name == "manageability")
+    check("mentions the fractional alternative and its cost",
+          "market-order-only" in (warning.detail or ""))
+
+    no_frac = make_snapshot(bars=pricey,
+                            tradability=verify.Tradability(tradable=True,
+                                                           fractional=False))
+    hard = verify.verify(call, no_frac, make_account(buying_power=5_000.0),
+                         verify.Policy(), None)
+    hard_warning = next(c for c in hard.checks if c.name == "manageability")
+    check("says plainly when fractional is unavailable",
+          "NOT available" in (hard_warning.detail or ""))
+
+    # Boundary: ceiling 1000 / price 333 = exactly 3 shares -> no warning
+    cheap = make_bars(count=300, start=333.0, drift=0.0, noise=0.0, seed=4)
+    last3 = float(cheap["close"].iloc[-1])
+    ok = verify.verify(make_call(call_price=round(last3, 2),
+                                 invalidation=round(last3 * 0.85, 2)),
+                       make_snapshot(bars=cheap),
+                       make_account(buying_power=5_000.0),
+                       verify.Policy(), None)
+    check("exactly 3 shares does not warn",
+          "manageability" not in names(ok.checks, "warn"),
+          f"warns={names(ok.checks,'warn')}")
+
+
 def test_verdict_never_upgrades_past_a_block():
     print("Verdict safety")
     thin = make_fundamentals(avg_volume_10d=1000)

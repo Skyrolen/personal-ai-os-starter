@@ -634,6 +634,90 @@ def compute_sizing(last_price: float, account: dict, policy: Policy,
     return sizing
 
 
+def check_his_direction(call: dict, brief: Brief,
+                        recency_days: int = 45) -> None:
+    """Was his own last action in this name a SELL?
+
+    The MU case exposed this: his most recent action was a trim, and that fact
+    sat in the transaction log instead of leading the brief. Buying what the
+    person you follow is actively reducing may still be right — his trims are
+    often rebalancing — but it must never be something you find out later.
+    Warn, don't block; and never bury it.
+    """
+    last = call.get("his_last_action")
+    if not last:
+        brief.unverified.append(
+            "his last action in this name (not filled from transactions.md)")
+        return
+
+    action = str(last.get("action", "")).lower()
+    action = {"alım": "buy", "alim": "buy", "satış": "sell",
+              "satis": "sell"}.get(action, action)
+    when = last.get("date")
+    age = _age_in_days(when)
+    price = last.get("price")
+    note = last.get("note") or ""
+
+    if action == "sell" and age is not None and age <= recency_days:
+        price_text = f" at {float(price):.2f}" if price else ""
+        detail = ("Buying what he is reducing can still be right — his trims "
+                  "are often rebalancing, not conviction changes — but it is "
+                  "the single most important fact on the page and must not be "
+                  "discovered after entry.")
+        if note:
+            detail += f' His stated reason: "{note}"'
+        brief.add("his_direction", "warn",
+                  f"He last SOLD this name on {when}{price_text}", detail)
+    elif action == "sell":
+        brief.add("his_direction", "info",
+                  f"His last action was a sell, but {age} days ago — stale")
+    elif action == "buy":
+        brief.add("his_direction", "pass",
+                  f"His last action was a buy on {when}")
+
+
+def check_manageability(sizing: dict, snapshot_fractional: bool | None,
+                        brief: Brief, min_shares: int = 3) -> None:
+    """Can this position be managed after entry, or only opened and closed?
+
+    The MU case: $972.78/share against a $1,000 ceiling buys exactly 1 share.
+    No trim into strength, no scale-in on weakness, no cutting half when a
+    warning escalates — the only move is all-or-nothing. That is a structurally
+    bad way to hold a name, and worst for exactly the volatile names where it
+    happens.
+    """
+    shares = sizing.get("shares")
+    ceiling = sizing.get("ceiling", 0.0)
+    price = sizing.get("price", 0.0)
+    if shares is None or not price:
+        return
+
+    max_shares = int(ceiling // price) if price > 0 else 0
+    if max_shares >= min_shares:
+        return
+
+    if snapshot_fractional:
+        alternative = ("Fractional orders are available on this name, which "
+                       "restores the ability to scale and trim — at the cost "
+                       "of market-order-only execution in regular hours (no "
+                       "limit-price protection on entry).")
+    elif snapshot_fractional is False:
+        alternative = ("Fractional orders are NOT available on this name, so "
+                       "there is no way around the all-or-nothing structure "
+                       "at this budget.")
+    else:
+        alternative = ("Check whether fractional orders are available; they "
+                       "would restore scaling at the cost of market-order-only "
+                       "execution.")
+
+    brief.add("manageability", "warn",
+              f"The {ceiling:,.2f} ceiling buys only {max_shares} whole "
+              f"share(s) at {price:,.2f}",
+              "A position this granular cannot be trimmed into strength, "
+              "scaled on weakness, or half-cut when a warning escalates — the "
+              "only available action is all-or-nothing. " + alternative)
+
+
 def check_position_budget(sizing: dict, policy: Policy, sleeve: Sleeve,
                           brief: Brief) -> None:
     """The size gate. Under the ceiling passes without comment; over it is not
@@ -791,12 +875,14 @@ def verify(call: dict, snapshot: MarketSnapshot, account: dict | None = None,
     sizing = compute_sizing(last_price, account, policy, sleeve, budget)
     brief.sizing = sizing
 
+    check_his_direction(call, brief)
     check_drift(call, last_price, brief, policy,
                 policy.drift_limit(sleeve, source), source)
     check_levels_coherent(call, last_price, brief)
     check_technicals(read, call, brief)
     check_fundamentals(fund, brief, policy)
     check_tradability(snapshot.tradability, snapshot.quote, fund, brief, policy)
+    check_manageability(sizing, snapshot.tradability.fractional, brief)
     check_position_budget(sizing, policy, sleeve, brief)
     check_sleeve(sleeve, account, sizing, policy, brief)
     check_funding(account, sizing, brief)

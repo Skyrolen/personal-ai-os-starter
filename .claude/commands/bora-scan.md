@@ -105,8 +105,19 @@ reports are stale tomorrow, his method is not.
 
 ### 5. Skool → `skool/YYYY-MM-DD-posts.md`
 
-Last ~30 days plus anything pinned. For each post: date, title, a short summary,
-**every ticker mentioned**, and whether it states or changes a thesis.
+Target: the last **30 days** plus anything pinned. His posting pace is high, so
+one session may not cover the window.
+
+**Resume, don't restart.** Before scraping, check the newest existing file in
+`skool/` for its recorded coverage and resume point (page/date). Continue from
+there instead of re-reading what's already on disk. At the end of every run,
+record in the file: the date range actually covered, and if short of 30 days,
+the exact resume point — so the next run (or a follow-up run right now) can
+close the gap. Partial coverage stated as partial is fine; partial coverage
+presented as complete is not.
+
+For each post: date, title, a short summary, **every ticker mentioned**, and
+whether it states or changes a thesis.
 
 Then flag separately:
 

@@ -84,6 +84,18 @@ Write `50_Finance/private/bora/calls/YYYY-MM-DD-TICKER.json`:
 ```
 
 - `call_price` is the **transaction price** in Mode A, the **ORT. MALİYET** in Mode B.
+- **Always fill `his_last_action`** from `50_Finance/private/bora/transactions.md`
+  — his most recent Alım or Satış in this ticker, whichever mode you're in:
+
+  ```json
+  "his_last_action": {"action": "Satış", "date": "2026-07-31",
+                      "price": 849.92, "note": "his stated reason"}
+  ```
+
+  The MU case is why: his last action was a trim, and that fact was buried in
+  the log instead of leading the brief. verify.py warns at the top when his
+  last action was a recent sell. If transactions.md has no entry for this
+  ticker, omit the field — the brief will list it as unverified.
 - **Omit what he didn't say.** The dashboard gives no targets and no stops. Do
   not invent them and do not attribute them to him. If there's no invalidation
   level, that's my job to set — say so.
@@ -151,6 +163,8 @@ the ceiling** rather than assuming a size.
 
 ## `TICKER` — VERDICT `[sleeve / mode]`
 
+**⚠ His direction:** [if his last action was a recent SELL, this line comes
+first: "He last SOLD this name on DATE at $X — reason: ..." Otherwise omit.]
 **What he did:** [bought N at $X on date] *or* [holds N lots, avg cost $X, K/Z +N%]
 **His own tag:** [Porttech score and label]
 **Follows his own rules here:** [yes / no / can't tell — one line, or "method not

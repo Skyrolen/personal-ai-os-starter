@@ -34,6 +34,7 @@ personal-ai-os-starter/
 │   │   ├── remind-me-at.md    ← /remind-me-at - schedule a reminder
 │   │   ├── execute-at.md      ← /execute-at - schedule a command
 │   │   ├── bora-scan.md       ← /bora-scan - crawl their platform into local files
+│   │   ├── bora-backtest.md   ← /bora-backtest - score their ledger vs the index
 │   │   ├── bora-check.md      ← /bora-check - verify a trade idea before acting
 │   │   ├── bora-portfolio.md  ← /bora-portfolio - diff their book against yours
 │   │   ├── portfolio.md       ← /portfolio - review holdings against policy
@@ -155,6 +156,7 @@ codex
 | **Bora Scan** | Crawl their platform into local files | `/bora-scan` | - | - |
 | **Bora Check** | Verify a trade idea before acting | `/bora-check NVDA` | - | Paste `prompts/bora-check.md` |
 | **Bora Portfolio** | Diff his book against yours | `/bora-portfolio` | - | Paste `prompts/bora-portfolio.md` |
+| **Bora Backtest** | Score his ledger vs the index | `/bora-backtest` | - | - |
 | **Portfolio** | Review holdings against policy | `/portfolio` | - | Paste `prompts/portfolio.md` |
 | **Trade Log** | Journal & score decisions | `/trade-log review` | - | Paste `prompts/trade-log.md` |
 
