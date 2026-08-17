@@ -72,6 +72,11 @@ losers at full size, which is precisely backwards.
 Raising the risk base raises every position cap at once. That is an amendment,
 made on a day I am not trying to place a trade.
 
+## Rule 1b — The agent never moves money
+
+Claude reports what to transfer. I make every transfer myself, in the Robinhood
+app. The agent has no transfer tools and must never be given any.
+
 ## Rule 1c — Sleeves
 
 The risk base is divided into **virtual sleeves** mirroring Bora's
@@ -126,10 +131,40 @@ the cap gets raised on evidence or stays put on evidence.
 Approving a **size** is not approving the **order**. Rule 0 still applies to the
 ticket.
 
-## Rule 1b — The agent never moves money
+## Rule 1f — The green flag
 
-Claude reports what to transfer. I make every transfer myself, in the Robinhood
-app. The agent has no transfer tools and must never be given any.
+`/bora-green TICKER` means **"work this one up and show me a ticket."** It is
+not standing authorisation.
+
+- **One name, one session, one ticket.** It does not carry to the next name,
+  the next day, or a re-run after the price has moved.
+- **It never overrides a hard block.** It removes the size-confirmation step
+  and nothing else.
+- **It does not skip the ticket gate.** Rule 0 stands: `place_equity_order`
+  needs my explicit approval of the exact ticket in front of me.
+
+If the price has moved materially since the brief that prompted the green flag,
+the check is re-run. A green flag given at one price is not a green flag at
+another.
+
+## Rule 1g — Screener candidates are not Bora candidates
+
+The daily brief may include names from a Robinhood screener that fit his
+profile's shape. **These carry no thesis from him.** Taking one is independent
+stock-picking — a different activity, with different risk, and none of the
+verification this system is built around.
+
+They must be rendered in their own labelled section, never merged into a single
+ranked table with his names. The distinction stops being obvious after the
+third morning, which is exactly why the label is mandatory rather than
+suggested.
+
+## Rule 1h — Rankings are takeability, not forecasts
+
+The daily ranking answers "can I take this cleanly today, at my size, under
+these rules". It does **not** predict returns. A high score means the
+mechanical obstacles are low — nothing more. Claude must never describe a rank
+as a buy signal, a recommendation, or a conviction level.
 
 ## Rule 2 — Every entry needs an invalidation level
 
@@ -236,4 +271,5 @@ job at that moment is friction rather than helpfulness.
 | 2026-08-14 | Initial policy | Set up alongside the Robinhood agentic account and `/bora-check` |
 | 2026-08-14 | Added Rules 1a/1b: risk base, no transfers | Sizing off the agentic balance did not constrain anything, because I fund that account per trade. Anchored the cap to declared capital instead. |
 | 2026-08-14 | Rule 7 rewritten from live account facts | Confirmed cash type, T+1, equities-only, and that the other two accounts are `agentic_allowed: false`. |
+| 2026-08-15 | Rules 1f/1g/1h: green flag, screener labelling, rankings | Daily loop added. A green flag needed an explicit scope so it could not drift into standing authorisation; screener names needed a hard label so they never blend with his; and the ranking needed stating as takeability rather than forecast. |
 | 2026-08-14 | Rules 1c/1d/1e: sleeves, tiered drift, sizing | His platform turned out to be a live holdings dashboard, not a feed of calls. Average cost is not an entry price, so one drift rule could not serve both. Sleeves mirror his sub-portfolio structure; sizing moved to propose-and-approve with overrides on the record. |

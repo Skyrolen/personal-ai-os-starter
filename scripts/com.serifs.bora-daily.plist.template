@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  launchd job for the daily Bora scan.
+
+  Why launchd and not CronCreate: Claude Code's CronCreate jobs live only in
+  the session that created them, are gone when Claude exits, and auto-expire
+  after 7 days. launchd survives reboots and closed terminals.
+
+  Install:
+    sed "s|__REPO__|$HOME/projects/serifs-os|g" \
+      scripts/com.serifs.bora-daily.plist.template \
+      > ~/Library/LaunchAgents/com.serifs.bora-daily.plist
+    launchctl load ~/Library/LaunchAgents/com.serifs.bora-daily.plist
+
+  Check / run now / remove:
+    launchctl list | grep bora
+    launchctl start com.serifs.bora-daily
+    launchctl unload ~/Library/LaunchAgents/com.serifs.bora-daily.plist
+
+  Fires 07:12 on weekdays. The off-minute is deliberate: :00 and :30 are when
+  every scheduled job on the planet fires at once.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.serifs.bora-daily</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>__REPO__/scripts/bora-daily.sh</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>__REPO__</string>
+
+    <key>StartCalendarInterval</key>
+    <array>
+        <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>7</integer><key>Minute</key><integer>12</integer></dict>
+        <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>7</integer><key>Minute</key><integer>12</integer></dict>
+        <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>7</integer><key>Minute</key><integer>12</integer></dict>
+        <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>7</integer><key>Minute</key><integer>12</integer></dict>
+        <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>7</integer><key>Minute</key><integer>12</integer></dict>
+    </array>
+
+    <key>StandardOutPath</key>
+    <string>__REPO__/50_Finance/private/logs/launchd.out</string>
+    <key>StandardErrorPath</key>
+    <string>__REPO__/50_Finance/private/logs/launchd.err</string>
+
+    <key>RunAtLoad</key>
+    <false/>
+</dict>
+</plist>

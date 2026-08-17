@@ -33,6 +33,8 @@ personal-ai-os-starter/
 │   │   ├── weekly-review.md   ← /weekly-review - end-of-week reflection
 │   │   ├── remind-me-at.md    ← /remind-me-at - schedule a reminder
 │   │   ├── execute-at.md      ← /execute-at - schedule a command
+│   │   ├── bora-daily.md      ← /bora-daily - morning signals + ranked candidates
+│   │   ├── bora-green.md      ← /bora-green - green-flag one name to a ticket
 │   │   ├── bora-scan.md       ← /bora-scan - crawl their platform into local files
 │   │   ├── bora-backtest.md   ← /bora-backtest - score their ledger vs the index
 │   │   ├── bora-check.md      ← /bora-check - verify a trade idea before acting
@@ -42,8 +44,11 @@ personal-ai-os-starter/
 │   └── claude-code-notifier.sh ← Optional notification helper
 ├── 50_Finance/
 │   └── trading-policy.md      ← Hard rules the financial agent must obey
+├── scripts/                   ← launchd daily runner + ntfy push
 ├── tools/                     ← Offline analysis engine (no network access)
 │   ├── indicators.py          ← SMA/EMA, RSI, MACD, ATR, support/resistance
+│   ├── rank.py                ← Takeability ranking (not a return forecast)
+│   ├── backtest.py            ← Score their ledger vs the index
 │   ├── market_data.py         ← Parses market.json assembled from Robinhood MCP
 │   └── verify.py              ← Trade-idea verification pipeline
 ├── docs/
@@ -153,6 +158,8 @@ codex
 | **Weekly Review** | End-of-week reflection | `/weekly-review` | Say "weekly review" | Paste `prompts/weekly-review.md` |
 | **Remind Me At** | One-shot reminder | `/remind-me-at +20m Call Sarah` | - | - |
 | **Execute At** | Schedule a command to run later | `/execute-at 9am /daily-plan` | - | - |
+| **Bora Daily** | Morning signals + ranked candidates | `/bora-daily` | - | - |
+| **Bora Green** | Green-flag one name through to a ticket | `/bora-green NVDA` | - | - |
 | **Bora Scan** | Crawl their platform into local files | `/bora-scan` | - | - |
 | **Bora Check** | Verify a trade idea before acting | `/bora-check NVDA` | - | Paste `prompts/bora-check.md` |
 | **Bora Portfolio** | Diff his book against yours | `/bora-portfolio` | - | Paste `prompts/bora-portfolio.md` |

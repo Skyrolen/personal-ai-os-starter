@@ -27,3 +27,7 @@ __pycache__/
 Thumbs.db
 .idea/
 .vscode/
+
+# Push config (ntfy topic)
+50_Finance/private/notify.json
+scripts/*.local.*

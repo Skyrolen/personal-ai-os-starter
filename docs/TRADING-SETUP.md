@@ -162,6 +162,8 @@ Add to `.claude/settings.json` so the tools run without a prompt each time:
 
 | Command | What it does |
 |---|---|
+| `/bora-daily` | Morning delta scan, signals, two ranked candidate lists |
+| `/bora-green TICKER` | Green-flag one name: full check → ticket → your approval → place |
 | `/bora-scan` | Crawl his platform + Skool into `50_Finance/private/bora/` |
 | `/bora-portfolio` | Diff his book against yours, sleeve by sleeve |
 | `/bora-check [ticker or pasted row]` | Verify one position, propose a size, stop for approval |
@@ -170,8 +172,11 @@ Add to `.claude/settings.json` so the tools run without a prompt each time:
 | `/trade-log log` | Journal a decision |
 | `/trade-log review` | Weekly scoring, including his hit rate and your overrides |
 
-Run them in that order: **scan → portfolio → check**. The scan writes files the
-other two read, so a `/bora-check` after a fresh scan needs far less browsing.
+Daily rhythm: **daily → green**. `/bora-daily` does its own delta scan and
+leaves you a ranked list; `/bora-green` acts on one name from it.
+
+Deeper passes when you want them: **scan → portfolio → backtest**. The full
+scan writes files the others read, so later commands need far less browsing.
 
 ### What the scan collects
 
@@ -192,6 +197,82 @@ data alone cannot show you.
 
 ---
 
+## 6. The daily loop
+
+### Scheduling (launchd, not cron)
+
+Claude Code's `CronCreate` jobs live only in the session that made them, vanish
+when Claude exits, and auto-expire after 7 days. For a real every-morning job
+use launchd:
+
+```bash
+sed "s|__REPO__|$HOME/projects/serifs-os|g" \
+  scripts/com.serifs.bora-daily.plist.template \
+  > ~/Library/LaunchAgents/com.serifs.bora-daily.plist
+launchctl load ~/Library/LaunchAgents/com.serifs.bora-daily.plist
+```
+
+Fires 07:12 on weekdays. `scripts/bora-daily.sh` launches the Chrome debug
+profile if port 9222 is down, waits for it, then runs `claude -p "/bora-daily"`.
+Logs land in `50_Finance/private/logs/`.
+
+Run it now, check it, or remove it:
+
+```bash
+launchctl start com.serifs.bora-daily
+launchctl list | grep bora
+launchctl unload ~/Library/LaunchAgents/com.serifs.bora-daily.plist
+```
+
+### Push notifications (ntfy.sh)
+
+`PushNotification` needs a live Claude session and Remote Control, so it cannot
+fire from a headless job. ntfy can:
+
+1. Install the **ntfy** app (iOS/Android).
+2. Pick a long, hard-to-guess topic name and subscribe to it.
+3. Create `50_Finance/private/notify.json` (gitignored):
+
+```json
+{"ntfy_topic": "your-long-random-topic-here", "include_tickers": true}
+```
+
+4. Test without sending: `scripts/notify.sh --dry-run "test"`
+
+> **An ntfy topic is readable by anyone who guesses the name.** The push carries
+> actions and tickers only. `notify.sh` refuses any message containing a dollar
+> amount — balances and position sizes never leave the machine.
+
+Pushes fire **only when there are signals**. Quiet mornings are silent on
+purpose; a channel that pings daily is one you stop reading.
+
+### The loop
+
+```
+/bora-daily   (or launchd, each weekday morning)
+      |
+      +-- signals: his buys, sells, tag changes, thesis posts
+      +-- FROM BORA        - his names, ranked by takeability
+      +-- SCREENER         - filter matches, no thesis from him
+      |
+/bora-green TICKER
+      |
+      +-- full /bora-check
+      +-- review_equity_order  ->  real ticket + warnings
+      +-- YOUR APPROVAL        ->  place_equity_order
+```
+
+**When it can't scan, it says so.** If Chrome is down or the Skool/platform
+session has expired, the run pushes "re-login needed", writes a `-FAILED.md`
+record, and stops. It will not emit a quiet-day report on a failed scan — a
+brief that says "no new signals" because nobody was logged in is worse than no
+brief, because you would believe it.
+
+Sessions expire periodically and no automation can log back in for you. That
+re-login is the one recurring manual step in the whole system.
+
+---
+
 ## What this does not do
 
 - **The backtest scores his *realised trading only*** — closed round-trips from
@@ -202,6 +283,11 @@ data alone cannot show you.
   backtesting was impossible for lack of timestamped history — the platform's
   transaction ledger *is* that history, so that claim was wrong and `/bora-backtest`
   supersedes it.)
+- **Rankings are takeability, not forecasts.** The daily list answers "can I
+  take this cleanly today at my size", never "will this go up". A high score
+  means low mechanical friction and nothing more.
+- **Screener names carry no thesis from him.** They are rendered in a separate
+  labelled section; taking one is independent stock-picking.
 - **No transfers.** The agent reports the exact amount to move between accounts;
   you move it. It has no transfer tools and must never be given any.
 - **No options or crypto** in the agentic account — its `option_level` is empty.
