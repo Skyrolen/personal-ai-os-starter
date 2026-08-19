@@ -8,7 +8,14 @@
       "Grep",
       "Bash(mkdir *)",
       "Bash(ls *)",
-      "Bash(.venv/bin/python tools/*)"
+      "Bash(.venv/bin/python tools/*)",
+      "Bash(curl -s -m 5 http://127.0.0.1:9222/*)",
+      "Bash(scripts/notify.sh *)",
+      "mcp__chrome-devtools__*",
+      "mcp__robinhood-trading__get_*",
+      "mcp__robinhood-trading__search",
+      "mcp__robinhood-trading__run_scan",
+      "mcp__robinhood-trading__create_scan"
     ]
   },
   "hooks": {

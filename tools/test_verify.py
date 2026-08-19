@@ -165,10 +165,20 @@ def test_sizing_uses_risk_base_not_account_balance():
 def test_sleeve_budgets_match_his_weights():
     print("Sleeve budgets")
     policy = verify.Policy(risk_base=20_000.0)
-    expected = {"P1": 14_770.0, "P4": 2_916.0, "P2": 1_242.0, "P5": 1_072.0}
+    expected = {"P1": 13_293.0, "P4": 2_624.0, "P2": 1_118.0, "P5": 965.0,
+                "P6": 2_000.0}
     for code, want in expected.items():
         got = round(policy.sleeve(code).budget(20_000.0), 0)
         check(f"{code} budget {want:,.0f}", got == want, f"got {got}")
+
+    total = sum(s.weight_pct for s in policy.sleeves.values())
+    check("weights total 100%", round(total, 3) == 100.0, f"got {total}")
+
+    # The carve-out must preserve his RELATIVE proportions exactly, or the
+    # mirror silently stops being a mirror.
+    ratio = policy.sleeve("P1").weight_pct / policy.sleeve("P4").weight_pct
+    check("P1:P4 ratio still matches his 73.85:14.58",
+          abs(ratio - (73.85 / 14.58)) < 1e-9, f"got {ratio}")
 
     check("unknown sleeve raises",
           _raises(lambda: policy.sleeve("P9")))
@@ -177,8 +187,11 @@ def test_sleeve_budgets_match_his_weights():
     check("P1 ceiling is the 5% rule (1000 < 3692)",
           policy.position_ceiling(policy.sleeve("P1")) == 1_000.0)
     p2_ceiling = round(policy.position_ceiling(policy.sleeve("P2")), 2)
-    check("P2 ceiling is the sleeve rule (310.50 < 1000)",
-          p2_ceiling == 310.50, f"got {p2_ceiling}")
+    check("P2 ceiling is the sleeve rule (279.45 < 1000)",
+          p2_ceiling == 279.45, f"got {p2_ceiling}")
+    p6_ceiling = round(policy.position_ceiling(policy.sleeve("P6")), 2)
+    check("P6 own-ideas ceiling is 500 — half a P1 position",
+          p6_ceiling == 500.0, f"got {p6_ceiling}")
 
 
 def test_recommendation_is_not_simply_the_maximum():
@@ -188,14 +201,15 @@ def test_recommendation_is_not_simply_the_maximum():
     policy = verify.Policy(risk_base=20_000.0)
     p4 = policy.sleeve("P4")
     sizing = verify.compute_sizing(100.0, make_account(), policy, p4)
-    # P4 budget 2916 / 3 positions = 972, ceiling = min(1000, 729) = 729
-    check("P4 ceiling 729", sizing["ceiling"] == 729.0, f"got {sizing['ceiling']}")
-    check("recommended clipped to ceiling", sizing["recommended"] == 729.0)
+    # P4 budget 2624.40 / 3 positions = 874.80; ceiling = min(1000, 656.10)
+    check("P4 ceiling 656.10", sizing["ceiling"] == 656.1,
+          f"got {sizing['ceiling']}")
+    check("recommended clipped to ceiling", sizing["recommended"] == 656.1)
 
     p2 = policy.sleeve("P2")
     s2 = verify.compute_sizing(50.0, make_account(), policy, p2)
-    # P2 budget 1242 / 6 = 207, below the 310.50 ceiling
-    check("P2 recommends 207, below its ceiling", s2["recommended"] == 207.0,
+    # P2 budget 1117.80 / 6 = 186.30, below the 279.45 ceiling
+    check("P2 recommends 186.30, below its ceiling", s2["recommended"] == 186.3,
           f"got {s2['recommended']}")
     check("not user_set when no budget given", s2["user_set"] is False)
 
@@ -401,13 +415,16 @@ def test_position_size_cap():
 
 
 def test_position_count_cap():
-    """The overall cap is derived from the sleeves (14+3+6=23), not a flat 10 —
-    a hardcoded 10 would have contradicted P1's own limit of 14."""
+    """The overall cap is derived from the sleeves (14+3+6+4=27), not a flat 10
+    — a hardcoded 10 would have contradicted P1's own limit of 14, and it would
+    have gone stale again the moment P6 was added."""
     print("Overall position cap")
     policy = verify.Policy()
-    check("total derived from tradeable sleeves",
-          policy.total_max_positions == 23,
-          f"got {policy.total_max_positions}")
+    expected = sum(s.max_positions for s in policy.sleeves.values()
+                   if s.tradeable)
+    check("total derived from tradeable sleeves, not hardcoded",
+          policy.total_max_positions == expected == 27,
+          f"got {policy.total_max_positions}, expected {expected}")
 
     ten = [{"ticker": f"S{i}", "shares": 1, "market_value": 10.0,
             "sector": "Energy", "sleeve": "P1"} for i in range(10)]
@@ -416,9 +433,9 @@ def test_position_count_cap():
           "position_count" not in names(ok.checks, "block"))
 
     full = [{"ticker": f"S{i}", "shares": 1, "market_value": 10.0,
-             "sector": "Energy", "sleeve": "P2"} for i in range(23)]
+             "sector": "Energy", "sleeve": "P2"} for i in range(expected)]
     brief = run(account=make_account(positions=full, buying_power=5_000.0))
-    check("23 positions blocks a new name",
+    check(f"{expected} positions blocks a new name",
           "position_count" in names(brief.checks, "block"),
           f"blocks={[c.name for c in brief.blocks]}")
     check("verdict is DISAGREE", brief.verdict == "DISAGREE")
@@ -602,6 +619,36 @@ def test_manageability_warning():
     check("exactly 3 shares does not warn",
           "manageability" not in names(ok.checks, "warn"),
           f"warns={names(ok.checks,'warn')}")
+
+
+def test_screen_source_type():
+    """Independent ideas: P6 sleeve, tight drift from the identified level, and
+    no his-direction check because he has no opinion on them."""
+    print("Screen source type")
+    call = make_call(sleeve="P6", source_type="screen")
+    call.pop("his_last_action", None)
+    brief = run(call=call, account=make_account(buying_power=5_000.0))
+    check("P6 screen idea is accepted", brief.sleeve == "P6"
+          and brief.source_type == "screen")
+    check("no his_direction check for own ideas",
+          not any(c.name == "his_direction" for c in brief.checks))
+    check("no his-action unverified noise",
+          not any("last action" in u for u in brief.unverified))
+
+    # Screen uses the strict transaction drift limit, not P6's holdings value.
+    policy = verify.Policy()
+    p6 = policy.sleeve("P6")
+    check("screen drift limit is the strict one",
+          policy.drift_limit(p6, "screen") == policy.transaction_drift_pct)
+
+    drifted = run(call=make_call(sleeve="P6", source_type="screen",
+                                 call_price=round(LAST / 1.10, 2)),
+                  account=make_account(buying_power=5_000.0))
+    check("10% past the screen's entry level blocks",
+          "drift" in names(drifted.checks, "block"))
+
+    check("unknown source_type still rejected",
+          _raises(lambda: run(call=make_call(source_type="vibes"))))
 
 
 def test_verdict_never_upgrades_past_a_block():

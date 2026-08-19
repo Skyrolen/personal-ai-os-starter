@@ -80,13 +80,21 @@ class Sleeve:
 
 
 def default_sleeves() -> dict[str, Sleeve]:
-    """Bora's weights as observed 2026-08-14. Overridden by risk-profile.json."""
+    """Defaults, overridden by risk-profile.json.
+
+    P1/P2/P4/P5 mirror Bora's sub-portfolios at his weights as observed
+    2026-08-14, scaled by 0.9 so his RELATIVE proportions are preserved exactly
+    while 10% is carved out for P6 — independent, screened ideas that must
+    never be mixed into a sleeve that mirrors his book.
+    """
     return {
-        "P1": Sleeve("P1", "Yatirim", 73.85, 14, 20.0),
-        "P4": Sleeve("P4", "Trade", 14.58, 3, 5.0),
-        "P2": Sleeve("P2", "Moonshot", 6.21, 6, 15.0),
-        "P5": Sleeve("P5", "Opsiyon", 5.36, 0, 5.0, tradeable=False,
+        "P1": Sleeve("P1", "Yatirim", 66.465, 14, 20.0),
+        "P4": Sleeve("P4", "Trade", 13.122, 3, 5.0),
+        "P2": Sleeve("P2", "Moonshot", 5.589, 6, 15.0),
+        "P5": Sleeve("P5", "Opsiyon", 4.824, 0, 5.0, tradeable=False,
                      note="agentic account has no option level"),
+        "P6": Sleeve("P6", "Kendi", 10.0, 4, 5.0,
+                     note="my own screened ideas, never his"),
     }
 
 
@@ -127,7 +135,10 @@ class Policy:
     def drift_limit(self, sleeve: Sleeve, source: str) -> float:
         """Tiered: strict against a dated transaction, looser against an
         average cost."""
-        if source == "transaction":
+        if source in ("transaction", "screen"):
+            # A screen identifies a SPECIFIC entry level, like a transaction —
+            # not a blended average. If price has run away from the level the
+            # setup was built on, the setup is gone.
             return self.transaction_drift_pct
         return sleeve.holdings_drift_pct
 
@@ -859,9 +870,10 @@ def verify(call: dict, snapshot: MarketSnapshot, account: dict | None = None,
 
     sleeve = policy.sleeve(call.get("sleeve") or "P1")
     source = (call.get("source_type") or "holdings").lower()
-    if source not in ("transaction", "holdings"):
+    if source not in ("transaction", "holdings", "screen"):
         raise ValueError(
-            f"source_type must be 'transaction' or 'holdings', got {source!r}"
+            f"source_type must be 'transaction', 'holdings' or 'screen', "
+            f"got {source!r}"
         )
 
     brief = Brief(ticker=ticker)
@@ -875,7 +887,10 @@ def verify(call: dict, snapshot: MarketSnapshot, account: dict | None = None,
     sizing = compute_sizing(last_price, account, policy, sleeve, budget)
     brief.sizing = sizing
 
-    check_his_direction(call, brief)
+    # An independent screen idea has no "his direction" — he has no opinion
+    # on it. Asking would report unverified every time, which is noise.
+    if source != "screen":
+        check_his_direction(call, brief)
     check_drift(call, last_price, brief, policy,
                 policy.drift_limit(sleeve, source), source)
     check_levels_coherent(call, last_price, brief)

@@ -48,6 +48,7 @@ personal-ai-os-starter/
 ├── tools/                     ← Offline analysis engine (no network access)
 │   ├── indicators.py          ← SMA/EMA, RSI, MACD, ATR, support/resistance
 │   ├── rank.py                ← Takeability ranking (not a return forecast)
+│   ├── screen.py              ← Four independent screens (own ideas, not theirs)
 │   ├── backtest.py            ← Score their ledger vs the index
 │   ├── market_data.py         ← Parses market.json assembled from Robinhood MCP
 │   └── verify.py              ← Trade-idea verification pipeline
@@ -201,6 +202,9 @@ same bet. `/bora-check` tests for exactly those.
   liquidity are authoritative for the venue you execute on. The Python layer
   makes no network calls at all: it only does arithmetic on data the agent
   fetched.
+- **Independent ideas are quarantined.** Screens generate the system's own
+  candidates, but they live in their own sleeve with a smaller cap and are
+  scored separately — so you can tell whose ideas actually made money.
 - **Personal data stays out of git.** Trade logs, balances, account numbers and
   any subscriber content live in `50_Finance/private/`, which is gitignored.
 
