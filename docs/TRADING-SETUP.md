@@ -230,12 +230,25 @@ launchctl unload ~/Library/LaunchAgents/com.serifs.bora-daily.plist
 fire from a headless job. ntfy can:
 
 1. Install the **ntfy** app (iOS/Android).
-2. Pick a long, hard-to-guess topic name and subscribe to it.
-3. Create `50_Finance/private/notify.json` (gitignored):
+2. **Generate** a topic — do not invent one by hand, and do not paste an
+   example from any document including this one:
 
-```json
-{"ntfy_topic": "your-long-random-topic-here", "include_tickers": true}
+```bash
+openssl rand -hex 16
 ```
+
+3. Write it into `50_Finance/private/notify.json` (gitignored) and subscribe to
+   that exact string in the ntfy app:
+
+```bash
+echo "{\"ntfy_topic\": \"$(openssl rand -hex 16)\", \"include_tickers\": true}" \
+  > 50_Finance/private/notify.json
+cat 50_Finance/private/notify.json
+```
+
+`notify.sh` refuses to send if the topic is a known placeholder or shorter than
+20 characters. **The topic string is the only thing protecting these pushes** —
+there is no auth on ntfy, so anyone who guesses it reads everything.
 
 4. Test without sending: `scripts/notify.sh --dry-run "test"`
 

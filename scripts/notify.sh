@@ -41,6 +41,29 @@ if [ -z "$TOPIC" ]; then
     exit 0
 fi
 
+# Guard: refuse a placeholder or guessable topic.
+#
+# This exists because a copy-pasteable setup snippet once shipped with
+# "pick-something-long-and-random-here" as the example value, and an example
+# that looks like a real value gets pasted as one. An ntfy topic IS the
+# credential: anyone who guesses the string reads every push.
+case "$TOPIC" in
+    pick-something-long-and-random-here|your-topic|your-long-random-topic-here|\
+    changeme|test-topic*|bora|bora-daily)
+        echo "notify: topic '$TOPIC' is a placeholder — refusing to send." >&2
+        echo "  Generate a real one:  openssl rand -hex 16" >&2
+        echo "  Then put it in $CONFIG and subscribe to it in the ntfy app." >&2
+        exit 1
+        ;;
+esac
+
+if [ "${#TOPIC}" -lt 20 ]; then
+    echo "notify: topic is only ${#TOPIC} chars — too short to be unguessable." >&2
+    echo "  An ntfy topic is the only thing protecting these pushes." >&2
+    echo "  Generate one with:  openssl rand -hex 16" >&2
+    exit 1
+fi
+
 # Guard against the obvious leak: refuse anything that looks like money.
 if printf '%s' "$MESSAGE" | grep -qE '\$[0-9]'; then
     echo "notify: message contains a dollar amount — refusing to send." >&2
