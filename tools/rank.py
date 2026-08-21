@@ -86,13 +86,41 @@ def _score_drift(cand: dict, sleeve: Sleeve, policy: Policy,
     drift = (price - cost) / cost * 100.0
     limit = sleeve.holdings_drift_pct
 
+    trend = str(cand.get("trend", "")).lower()
+    falling = "downtrend" in trend
+    tag = _normalize_tag(cand.get("porttech", ""))
+
     if drift > limit:
         out.add("drift", 0.0,
                 f"{drift:+.1f}% above his cost, over the {limit:.0f}% "
                 f"{sleeve.code} limit", blocking=True)
     elif drift <= 0:
-        out.add("drift", 30.0,
-                f"{drift:+.1f}% — at or below his cost, the cleanest entry")
+        # A falling knife is not a discount.
+        #
+        # "Below his cost" was scored as the cleanest possible entry, which is
+        # backwards when the reason it is cheap is that it is still falling.
+        # Live case that exposed this: a name 22.9% under his last buy, in a
+        # downtrend, tagged Kritik — it ranked FIRST at 90/100. Being cheap
+        # relative to someone else's entry says nothing about why.
+        deep = drift < -10.0
+        if deep and (falling or tag == "Kritik"):
+            why = "in a downtrend" if falling else "flagged Kritik by his own system"
+            out.add("drift", 0.0,
+                    f"{drift:+.1f}% below his cost and {why} — he is underwater "
+                    f"and it has not stopped", blocking=True)
+        elif deep:
+            out.add("drift", 5.0,
+                    f"{drift:+.1f}% below his cost — a big gap. Cheaper than he "
+                    f"paid is not the same as cheap; find out why before reading "
+                    f"it as an opportunity")
+        elif falling:
+            out.add("drift", 5.0,
+                    f"{drift:+.1f}% below his cost but trending down — near his "
+                    f"entry, though momentum is against you")
+        else:
+            out.add("drift", 30.0,
+                    f"{drift:+.1f}% — at or below his cost with the trend intact, "
+                    f"the cleanest entry")
     elif drift <= limit * 0.25:
         out.add("drift", 25.0, f"{drift:+.1f}% above his cost, well inside {limit:.0f}%")
     elif drift <= limit * 0.5:

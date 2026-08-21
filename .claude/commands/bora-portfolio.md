@@ -20,7 +20,7 @@ If `/bora-scan` has run recently, use the latest file in
 snapshot you used and how old it is. Re-crawl only if it's stale or missing.
 
 Via Chrome DevTools MCP against my logged-in debug profile:
-`https://portfolio-platform-production-7518.up.railway.app/`
+`https://portfolio-platform-production-7518.up.railway.app/pano`
 
 Capture from the home page:
 

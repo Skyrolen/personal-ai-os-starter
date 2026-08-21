@@ -147,6 +147,22 @@ If the price has moved materially since the brief that prompted the green flag,
 the check is re-run. A green flag given at one price is not a green flag at
 another.
 
+## Rule 1j — Below his cost is not automatically a discount
+
+A name trading under his average cost is only a better entry **if the reason is
+time, not deterioration**. Cheap relative to someone else's entry says nothing
+about why it is cheap.
+
+A deep discount (worse than −10%) combined with a downtrend, or with his own
+system tagging it Kritik, is a **falling knife and is blocked** — not ranked
+highly. He is underwater in it and it has not stopped.
+
+This rule exists because it happened: a name 22.9% below his last buy, still
+falling, on a tag the platform itself could not verify, was ranked **first at
+90/100** purely for being "below his cost". The agent caught it by judgement and
+called it a don't-touch. The scoring was fixed so the next one does not depend
+on judgement catching it.
+
 ## Rule 1i — P6 is mine, and it is quarantined
 
 The risk base is **90% mirror, 10% mine**. P1/P2/P4/P5 hold his weights at his
@@ -288,6 +304,7 @@ job at that moment is friction rather than helpfulness.
 | 2026-08-14 | Initial policy | Set up alongside the Robinhood agentic account and `/bora-check` |
 | 2026-08-14 | Added Rules 1a/1b: risk base, no transfers | Sizing off the agentic balance did not constrain anything, because I fund that account per trade. Anchored the cap to declared capital instead. |
 | 2026-08-14 | Rule 7 rewritten from live account facts | Confirmed cash type, T+1, equities-only, and that the other two accounts are `agentic_allowed: false`. |
+| 2026-08-21 | Rule 1j: falling-knife guard | A live daily run ranked a collapsing name first for being below his cost. Fixed in rank.py with a regression test, and written down here so the reasoning survives the code. |
 | 2026-08-15 | Rule 1i + sleeve rescale: P6 Kendi at 10% | Independent screens added. His weights scaled by 0.9 so the relative mirror stays exact while 10% is carved out for my own ideas, quarantined so their performance can be measured separately. |
 | 2026-08-15 | Rules 1f/1g/1h: green flag, screener labelling, rankings | Daily loop added. A green flag needed an explicit scope so it could not drift into standing authorisation; screener names needed a hard label so they never blend with his; and the ranking needed stating as takeability rather than forecast. |
 | 2026-08-14 | Rules 1c/1d/1e: sleeves, tiered drift, sizing | His platform turned out to be a live holdings dashboard, not a feed of calls. Average cost is not an entry price, so one drift rule could not serve both. Sleeves mirror his sub-portfolio structure; sizing moved to propose-and-approve with overrides on the record. |

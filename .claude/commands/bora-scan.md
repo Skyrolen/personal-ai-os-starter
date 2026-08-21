@@ -11,7 +11,7 @@ decides.
 
 ### 0. Setup
 
-His platform: `https://portfolio-platform-production-7518.up.railway.app/`
+His platform: `https://portfolio-platform-production-7518.up.railway.app/pano`
 Skool: `https://www.skool.com/`
 
 Read both through the **Chrome DevTools MCP** against my logged-in debug

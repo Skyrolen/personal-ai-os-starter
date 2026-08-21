@@ -121,6 +121,50 @@ def test_drift_blocks_over_sleeve_limit():
           points(below, "drift") == 30.0)
 
 
+def test_falling_knife_is_not_a_discount():
+    """Regression from a live run: a name 22.9% under his last buy, in a
+    downtrend, tagged Kritik, ranked FIRST at 90/100 because "below his cost"
+    scored as the cleanest possible entry. Being cheap relative to someone
+    else's entry says nothing about why it is cheap."""
+    print("Falling knife")
+    knife = run(cand=candidate(price=77.1, his_avg_cost=100.0,
+                               trend="downtrend", porttech="Kritik (2, score 5)"))
+    check("deep discount + downtrend blocks", not knife.takeable,
+          f"blocks={[c.name for c in knife.blockers]}")
+    check("the blocker is drift, not something incidental",
+          "drift" in [c.name for c in knife.blockers])
+    blocker = next(c for c in knife.blockers if c.name == "drift")
+    check("says he is underwater and it has not stopped",
+          "underwater" in blocker.reason)
+
+    # Kritik alone is enough — the tag is his own system disagreeing with him.
+    tagged = run(cand=candidate(price=77.1, his_avg_cost=100.0,
+                                trend="uptrend", porttech="Kritik"))
+    check("deep discount + Kritik blocks even without a downtrend",
+          not tagged.takeable)
+
+    # A shallow dip below his cost with the trend intact is still the best case.
+    clean = run(cand=candidate(price=98.0, his_avg_cost=100.0))
+    check("shallow dip in an uptrend still scores +30",
+          points(clean, "drift") == 30.0, f"got {points(clean, 'drift')}")
+
+    # Deep but no other bearish confirmation: heavily demoted, not blocked.
+    lonely = run(cand=candidate(price=77.1, his_avg_cost=100.0,
+                                trend="mixed / range-bound",
+                                porttech="Sağlıklı"))
+    check("deep discount alone demotes to +5, not blocked",
+          lonely.takeable and points(lonely, "drift") == 5.0,
+          f"got {points(lonely, 'drift')}")
+
+    # And the headline property: a knife must not outrank a healthy name.
+    healthy = candidate(ticker="GOOD")
+    ranked = rank.rank_all([candidate(ticker="KNIFE", price=77.1,
+                                      his_avg_cost=100.0, trend="downtrend",
+                                      porttech="Kritik"), healthy],
+                           policy(), account(), TODAY)
+    check("healthy name outranks the knife", ranked[0].ticker == "GOOD")
+
+
 def test_manageability_demotes():
     print("Manageability")
     # P1 ceiling is 1000. At 400/share that is 2 whole shares.

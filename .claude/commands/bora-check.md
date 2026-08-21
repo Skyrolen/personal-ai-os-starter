@@ -20,7 +20,7 @@ my explicit approval of that exact ticket.**
 
 Input is `$ARGUMENTS`: a ticker, a pasted row, or nothing.
 
-His platform is `https://portfolio-platform-production-7518.up.railway.app/`.
+His platform is `https://portfolio-platform-production-7518.up.railway.app/pano`.
 Read it through the Chrome DevTools MCP against my logged-in debug profile.
 
 **Mode A — `transaction`** (preferred). From **`İşlem Geçmişi`** (transaction
@@ -101,6 +101,15 @@ Write `50_Finance/private/bora/calls/YYYY-MM-DD-TICKER.json`:
   level, that's my job to set — say so.
 - Record his Porttech tag verbatim. If he flags his own position **Kritik** or
   **İzle**, that is evidence and it belongs in the brief.
+- **Record whose idea it actually is.** Set `"origin"` to one of:
+  - `"his_thesis"` — he stated a reason himself
+  - `"platform_setup"` — it came from the platform's automated `Setup'lar`,
+    `Swing Radar`, `Squeeze Radar` etc. rather than from him
+  - `"unknown"` — a transaction with no stated reasoning
+
+  These are not the same signal and must not be flattened into "he bought it".
+  A platform-generated setup has no more human conviction behind it than one of
+  our own screens does, and the brief must say so.
 
 ### 4. Pull account state from Robinhood
 
@@ -166,6 +175,7 @@ the ceiling** rather than assuming a size.
 **⚠ His direction:** [if his last action was a recent SELL, this line comes
 first: "He last SOLD this name on DATE at $X — reason: ..." Otherwise omit.]
 **What he did:** [bought N at $X on date] *or* [holds N lots, avg cost $X, K/Z +N%]
+**Whose idea:** [his own stated thesis / platform-generated setup / no stated reason]
 **His own tag:** [Porttech score and label]
 **Follows his own rules here:** [yes / no / can't tell — one line, or "method not
 captured yet" if `method.md` is absent]
