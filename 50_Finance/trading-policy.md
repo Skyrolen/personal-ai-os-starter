@@ -147,6 +147,28 @@ If the price has moved materially since the brief that prompted the green flag,
 the check is re-run. A green flag given at one price is not a green flag at
 another.
 
+## Rule 1k — Concentration is measured across every account I own
+
+Sleeves govern the agentic account. They cannot see a personal or retirement
+account, so a name held there is invisible to every check — and mirroring it
+doubles a bet rather than opening one.
+
+- `/bora-check` must be given `external_positions` and `total_portfolio_value`
+  in `account.json`. Without them the brief reports the exposure as
+  **unverified**, never as zero.
+- **Single-name exposure across all accounts** warns past 10% of net worth and
+  blocks past 25%.
+- **Sector concentration is a share of total net worth**, not of the risk base.
+  Measuring against the risk base understated it badly: a book can be a third
+  technology overall while the agentic slice looks untouched.
+- **Sizing is deliberately unchanged.** The risk base governs how much I may
+  risk; this rule governs whether I already own the risk. Two different
+  questions, and conflating them would let a large outside holding shrink my
+  position sizing everywhere.
+
+This exists because a real cross-account read found ~31% of net worth in three
+names the mirror system had no visibility into — one of them 18% on its own.
+
 ## Rule 1j — Below his cost is not automatically a discount
 
 A name trading under his average cost is only a better entry **if the reason is
@@ -304,6 +326,7 @@ job at that moment is friction rather than helpfulness.
 | 2026-08-14 | Initial policy | Set up alongside the Robinhood agentic account and `/bora-check` |
 | 2026-08-14 | Added Rules 1a/1b: risk base, no transfers | Sizing off the agentic balance did not constrain anything, because I fund that account per trade. Anchored the cap to declared capital instead. |
 | 2026-08-14 | Rule 7 rewritten from live account facts | Confirmed cash type, T+1, equities-only, and that the other two accounts are `agentic_allowed: false`. |
+| 2026-08-25 | Rule 1k: cross-account concentration | A full read of all three accounts found ~31% of net worth in NVDA/TSLA/ONTO, held outside the agentic account and invisible to every sleeve check. Concentration now spans all accounts and is measured against net worth. |
 | 2026-08-21 | Rule 1j: falling-knife guard | A live daily run ranked a collapsing name first for being below his cost. Fixed in rank.py with a regression test, and written down here so the reasoning survives the code. |
 | 2026-08-15 | Rule 1i + sleeve rescale: P6 Kendi at 10% | Independent screens added. His weights scaled by 0.9 so the relative mirror stays exact while 10% is carved out for my own ideas, quarantined so their performance can be measured separately. |
 | 2026-08-15 | Rules 1f/1g/1h: green flag, screener labelling, rankings | Daily loop added. A green flag needed an explicit scope so it could not drift into standing authorisation; screener names needed a hard label so they never blend with his; and the ranking needed stating as takeability rather than forecast. |

@@ -122,6 +122,22 @@ margin account and Roth IRA are `agentic_allowed: false`.
 with the sleeve it belongs to from the trade log — the sleeve checks are
 meaningless without it.
 
+**Then read the other accounts too, read-only** (Rule 1k). Robinhood makes
+non-agentic accounts read-only by design; reading them for analysis is
+permitted, proposing or placing against them is not. Add:
+
+```json
+"total_portfolio_value": 49158.75,
+"external_positions": [
+  {"ticker": "NVDA", "market_value": 8858.22, "sector": "Electronic Technology",
+   "account": "individual"}
+]
+```
+
+Without these the brief reports outside exposure as **unverified**, never as
+zero. A name you already hold elsewhere does not get diversified by mirroring
+it — it gets doubled, and the sleeve checks alone cannot see that.
+
 ### 5. Assemble market data from Robinhood
 
 | Tool | For |

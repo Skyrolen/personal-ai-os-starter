@@ -651,6 +651,66 @@ def test_screen_source_type():
           _raises(lambda: run(call=make_call(source_type="vibes"))))
 
 
+def test_existing_exposure_across_accounts():
+    """The blind spot a real cross-account read exposed: 18% of net worth sat
+    in NVDA in a personal account, invisible to the sleeve checks. Mirroring it
+    would have been sized as a fresh position."""
+    print("Cross-account exposure")
+    external = [{"ticker": "TEST", "market_value": 8_858.22,
+                 "sector": "Technology", "account": "individual"}]
+    acct = make_account(buying_power=5_000.0,
+                        external_positions=external,
+                        total_portfolio_value=49_158.75)
+    brief = run(account=acct)
+    check("warns when already held elsewhere",
+          "existing_exposure" in names(brief.checks, "warn"),
+          f"warns={names(brief.checks,'warn')}")
+    warning = next(c for c in brief.checks if c.name == "existing_exposure")
+    check("names the account it is held in",
+          "individual" in (warning.detail or ""))
+    check("says it concentrates rather than diversifies",
+          "does not diversify" in (warning.detail or ""))
+
+    # Above 25% of net worth it blocks outright.
+    heavy = make_account(buying_power=5_000.0,
+                         external_positions=[{"ticker": "TEST",
+                                              "market_value": 14_000.0,
+                                              "sector": "Technology",
+                                              "account": "individual"}],
+                         total_portfolio_value=49_158.75)
+    blocked = run(account=heavy)
+    check("blocks past 25% of net worth",
+          "existing_exposure" in names(blocked.checks, "block"))
+
+    none_held = run(account=make_account(
+        buying_power=5_000.0,
+        external_positions=[{"ticker": "OTHER", "market_value": 5_000.0,
+                             "sector": "Energy", "account": "individual"}],
+        total_portfolio_value=49_158.75))
+    check("passes when not held elsewhere",
+          "existing_exposure" in names(none_held.checks, "pass"))
+
+    silent = run()
+    check("absent data is unverified, not assumed zero",
+          any("outside the agentic" in u for u in silent.unverified))
+
+
+def test_concentration_spans_all_accounts():
+    print("Cross-account concentration")
+    external = [{"ticker": f"T{i}", "market_value": 4_000.0,
+                 "sector": "Technology", "account": "individual"}
+                for i in range(4)]
+    acct = make_account(buying_power=5_000.0, external_positions=external,
+                        total_portfolio_value=49_158.75)
+    brief = run(account=acct)
+    check("sector concentration counts external holdings",
+          "concentration" in names(brief.checks, "warn"),
+          f"warns={names(brief.checks,'warn')}")
+    conc = next(c for c in brief.checks if c.name == "concentration")
+    check("measured against net worth, not the risk base",
+          "net worth" in conc.message)
+
+
 def test_verdict_never_upgrades_past_a_block():
     print("Verdict safety")
     thin = make_fundamentals(avg_volume_10d=1000)

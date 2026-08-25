@@ -549,6 +549,67 @@ def check_funding(account: dict, sizing: dict, brief: Brief) -> None:
                   "a good-faith violation.")
 
 
+def check_existing_exposure(call: dict, account: dict, sizing: dict,
+                            brief: Brief, policy: Policy) -> None:
+    """Do I already own this name somewhere the sleeve system cannot see?
+
+    Sleeves track the agentic account. Holdings in a personal or retirement
+    account are invisible to them, so mirroring a name held elsewhere doubles a
+    bet rather than opening one. Sizing is deliberately unchanged — the risk
+    base governs that — but the brief must never imply a fresh position when
+    the real exposure is already large.
+    """
+    external = account.get("external_positions") or []
+    if not external:
+        brief.unverified.append(
+            "holdings outside the agentic account (external_positions not supplied)")
+        return
+
+    ticker = (call.get("ticker") or "").upper()
+    held = [p for p in external if str(p.get("ticker", "")).upper() == ticker]
+    total = _total_portfolio(account, policy)
+
+    if not held:
+        brief.add("existing_exposure", "pass",
+                  f"No {ticker} held outside the agentic account")
+        return
+
+    existing = sum(float(p.get("market_value", 0.0)) for p in held)
+    where = ", ".join(sorted({str(p.get("account", "elsewhere")) for p in held}))
+    combined = existing + sizing.get("cost", 0.0)
+    pct = combined / total * 100.0 if total else 0.0
+
+    detail = (f"You already hold {existing:,.2f} of {ticker} in {where}. "
+              f"Adding {sizing.get('cost', 0):,.2f} here takes the combined "
+              f"position to {combined:,.2f}, {pct:.1f}% of your {total:,.0f} "
+              f"portfolio. This does not diversify anything — it concentrates "
+              f"a bet you have already made.")
+
+    if pct > 25.0:
+        brief.add("existing_exposure", "block",
+                  f"{ticker} would be {pct:.1f}% of total net worth across all "
+                  f"accounts", detail)
+    elif pct > 10.0:
+        brief.add("existing_exposure", "warn",
+                  f"{ticker} would be {pct:.1f}% of total net worth across all "
+                  f"accounts", detail)
+    else:
+        brief.add("existing_exposure", "info",
+                  f"Already hold {existing:,.2f} of {ticker} elsewhere; "
+                  f"combined {pct:.1f}% of net worth", detail)
+
+
+def _total_portfolio(account: dict, policy: Policy) -> float:
+    """Concentration is a share of everything you own, not of the slice this
+    system happens to govern."""
+    stated = account.get("total_portfolio_value")
+    if stated:
+        return float(stated)
+    external = sum(float(p.get("market_value", 0.0))
+                   for p in (account.get("external_positions") or []))
+    return (external + float(account.get("account_value", 0.0))) or policy.risk_base
+
+
 def check_policy(call: dict, account: dict, fund: Fundamentals, sizing: dict,
                  brief: Brief, policy: Policy) -> None:
     """Portfolio-level limits, including the concentration check that matters
@@ -591,22 +652,27 @@ def check_policy(call: dict, account: dict, fund: Fundamentals, sizing: dict,
     # Sector concentration. Correlated names are one bet wearing many names.
     sector = fund.sector
     if sector:
+        # Across ALL accounts, and as a share of total net worth. Measuring
+        # against the risk base alone understated it badly: a book can be a
+        # third tech overall while the agentic slice looks untouched.
+        everything = positions + (account.get("external_positions") or [])
         sector_value = sum(
-            float(p.get("market_value", 0.0)) for p in positions
+            float(p.get("market_value", 0.0)) for p in everything
             if str(p.get("sector", "")).lower() == sector.lower()
         )
         new_value = sector_value + sizing.get("cost", 0.0)
-        new_pct = new_value / policy.risk_base * 100.0
+        total = _total_portfolio(account, policy)
+        new_pct = new_value / total * 100.0 if total else 0.0
         if new_pct > policy.max_sector_pct:
             brief.add("concentration", "warn",
-                      f"{sector} would be {new_pct:.0f}% of the risk base "
-                      f"(soft limit {policy.max_sector_pct:.0f}%)",
+                      f"{sector} would be {new_pct:.0f}% of total net worth "
+                      f"across all accounts (soft limit {policy.max_sector_pct:.0f}%)",
                       "His published book is concentrated US megacap tech. "
                       "Copying it in full is one macro bet held under eleven "
                       "names — they will draw down together.")
         else:
             brief.add("concentration", "pass",
-                      f"{sector} exposure would be {new_pct:.0f}% of risk base")
+                      f"{sector} would be {new_pct:.0f}% of total net worth")
     else:
         brief.unverified.append("sector concentration (sector unknown)")
 
@@ -922,6 +988,7 @@ def verify(call: dict, snapshot: MarketSnapshot, account: dict | None = None,
     check_position_budget(sizing, policy, sleeve, brief)
     check_sleeve(sleeve, account, sizing, policy, brief)
     check_funding(account, sizing, brief)
+    check_existing_exposure(call, account, sizing, brief, policy)
     check_policy(call, account, fund, sizing, brief, policy)
 
     brief.checks.sort(key=lambda c: SEVERITY_ORDER[c.severity])
