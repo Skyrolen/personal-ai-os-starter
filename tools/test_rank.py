@@ -148,13 +148,22 @@ def test_falling_knife_is_not_a_discount():
     check("shallow dip in an uptrend still scores +30",
           points(clean, "drift") == 30.0, f"got {points(clean, 'drift')}")
 
-    # Deep but no other bearish confirmation: heavily demoted, not blocked.
-    lonely = run(cand=candidate(price=77.1, his_avg_cost=100.0,
+    # -15%: deep enough to demote, not deep enough to block on magnitude.
+    lonely = run(cand=candidate(price=85.0, his_avg_cost=100.0,
                                 trend="mixed / range-bound",
                                 porttech="Sağlıklı"))
-    check("deep discount alone demotes to +5, not blocked",
+    check("-15% alone demotes to +5, not blocked",
           lonely.takeable and points(lonely, "drift") == 5.0,
           f"got {points(lonely, 'drift')}")
+
+    # Beyond -20%, magnitude alone blocks regardless of tag or trend. AAOI
+    # reached -30% on an İzle tag, so a rule needing Kritik-or-downtrend never
+    # fired and it read as "inside the limit".
+    izle = run(cand=candidate(price=69.7, his_avg_cost=100.0,
+                              trend="mixed / range-bound",
+                              porttech="İzle (1, score 45)"))
+    check("-30% blocks on magnitude even with only an İzle tag",
+          not izle.takeable, f"blocks={[c.name for c in izle.blockers]}")
 
     # And the headline property: a knife must not outrank a healthy name.
     healthy = candidate(ticker="GOOD")

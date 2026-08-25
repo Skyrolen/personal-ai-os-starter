@@ -274,7 +274,18 @@ def check_drift(call: dict, last_price: float, brief: Brief, policy: Policy,
     elif drift > limit_pct / 2:
         brief.add("drift", "warn", f"Price is {drift:+.1f}% above {basis}",
                   detail)
-    elif drift < -15.0:
+    elif drift < -20.0:
+        # The drift ceiling only caps drift ABOVE his entry, so a collapsing
+        # name used to pass as "inside the limit". A 20%+ gap below his cost is
+        # almost never "he was early" — it is "he was wrong, or something
+        # broke". Block it; the ranker does the same.
+        brief.add("drift", "block",
+                  f"Price is {drift:+.1f}% BELOW {basis} — this is not a "
+                  f"discount", detail +
+                  " He is deeply underwater here. Being cheaper than someone "
+                  "else's entry says nothing about why it is cheap. Find the "
+                  "reason before treating this as an opportunity.")
+    elif drift < -10.0:
         brief.add("drift", "warn",
                   f"Price is {drift:+.1f}% BELOW {basis}", detail +
                   " Cheaper than he paid — but check whether the thesis broke "
@@ -314,8 +325,18 @@ def check_levels_coherent(call: dict, last_price: float, brief: Brief) -> None:
                       "was captured wrong.")
         else:
             risk_pct = abs(last_price - invalidation) / last_price * 100.0
-            brief.add("levels", "pass",
-                      f"Risk to invalidation: {risk_pct:.1f}%")
+            if risk_pct < 3.0:
+                brief.add("levels", "warn",
+                          f"Only {risk_pct:.1f}% of room to the invalidation "
+                          f"level at {invalidation:.2f}",
+                          "Entering this close to your own stop is not tight "
+                          "risk management — it is a coin flip on one day's "
+                          "range. Either wait for a better entry, set a level "
+                          "you actually believe in, or accept that you are "
+                          "likely to be stopped out by noise.")
+            else:
+                brief.add("levels", "pass",
+                          f"Risk to invalidation: {risk_pct:.1f}%")
 
     if target:
         wrong_side = (target <= last_price) if bullish else (target >= last_price)

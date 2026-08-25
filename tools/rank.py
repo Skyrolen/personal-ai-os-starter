@@ -103,7 +103,14 @@ def _score_drift(cand: dict, sleeve: Sleeve, policy: Policy,
         # downtrend, tagged Kritik — it ranked FIRST at 90/100. Being cheap
         # relative to someone else's entry says nothing about why.
         deep = drift < -10.0
-        if deep and (falling or tag == "Kritik"):
+        if drift < -20.0:
+            # Magnitude alone is enough. AAOI reached -30% carrying an İzle tag
+            # rather than Kritik, so a condition requiring Kritik-or-downtrend
+            # never fired and it read as "inside the limit".
+            out.add("drift", 0.0,
+                    f"{drift:+.1f}% below his cost — he is deeply underwater, "
+                    f"whatever the tag says", blocking=True)
+        elif deep and (falling or tag == "Kritik"):
             why = "in a downtrend" if falling else "flagged Kritik by his own system"
             out.add("drift", 0.0,
                     f"{drift:+.1f}% below his cost and {why} — he is underwater "
